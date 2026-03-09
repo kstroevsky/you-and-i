@@ -83,6 +83,40 @@ describe('createGameStore', () => {
     expect(store.getState().gameState.positionCounts).toEqual(state2.positionCounts);
   });
 
+  it('recomputes selectable cells when undo crosses game-over/active states with same board hash', () => {
+    const activeState = createInitialState();
+    const gameOverState = {
+      ...activeState,
+      status: 'gameOver' as const,
+      victory: { type: 'threefoldDraw' as const },
+    };
+    const store = createGameStore({
+      initialSession: createSession(gameOverState, {
+        present: undoFrame(gameOverState),
+        past: [undoFrame(activeState)],
+        turnLog: [],
+      }),
+      storage: undefined,
+    });
+
+    expect(store.getState().gameState.status).toBe('gameOver');
+    expect(store.getState().selectableCoords).toEqual([]);
+
+    store.getState().undo();
+
+    expect(store.getState().gameState.status).toBe('active');
+    expect(store.getState().selectableCoords.length).toBeGreaterThan(0);
+
+    const source = store.getState().selectableCoords[0];
+    expect(source).toBeDefined();
+    if (!source) {
+      return;
+    }
+
+    store.getState().selectCell(source);
+    expect(store.getState().availableActionKinds.length).toBeGreaterThan(0);
+  });
+
   it('matches repeated undo/redo when traveling to a cursor directly', () => {
     const config = withConfig();
     const state0 = createInitialState(config);
@@ -281,7 +315,7 @@ describe('createGameStore', () => {
     expect(store.getState().gameState.currentPlayer).toBe('white');
     expect(store.getState().selectedCell).toBe('C3');
     expect(store.getState().selectedActionType).toBe('jumpSequence');
-    expect(store.getState().legalTargets).toEqual(['A1', 'E5']);
+    expect(store.getState().legalTargets).toEqual(['E5']);
 
     store.getState().selectCell('E5');
 
@@ -315,7 +349,7 @@ describe('createGameStore', () => {
 
     expect(store.getState().selectedCell).toBe('C3');
     expect(store.getState().selectedActionType).toBe('jumpSequence');
-    expect(store.getState().legalTargets).toEqual(['A1', 'E5']);
+    expect(store.getState().legalTargets).toEqual(['E5']);
     expect(store.getState().gameState.currentPlayer).toBe('white');
   });
 });

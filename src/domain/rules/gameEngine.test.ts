@@ -224,6 +224,73 @@ describe('game engine', () => {
     expect(afterSecondJump.currentPlayer).toBe('black');
   });
 
+  it('ends turn when only repeating jump-back continuation exists', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        A1: [checker('white')],
+        B2: [checker('white')],
+        F6: [checker('black')],
+      }),
+    );
+    const afterFirstJump = applyAction(
+      state,
+      {
+        type: 'jumpSequence',
+        source: 'A1',
+        path: ['C3'],
+      },
+      withConfig(),
+    );
+
+    expect(afterFirstJump.currentPlayer).toBe('black');
+    expect(
+      getJumpContinuationTargets(
+        {
+          ...afterFirstJump,
+          currentPlayer: 'white',
+        },
+        'C3',
+        [],
+      ),
+    ).toEqual([]);
+  });
+
+  it('keeps non-repeating continuation targets while excluding jump-back loops', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        A1: [checker('white')],
+        B2: [checker('white')],
+        D4: [checker('white')],
+        F6: [checker('black')],
+      }),
+    );
+    const afterFirstJump = applyAction(
+      state,
+      {
+        type: 'jumpSequence',
+        source: 'A1',
+        path: ['C3'],
+      },
+      withConfig(),
+    );
+
+    expect(afterFirstJump.currentPlayer).toBe('white');
+    const jumpActions = getLegalActionsForCell(afterFirstJump, 'C3', withConfig()).filter(
+      (action) => action.type === 'jumpSequence',
+    );
+
+    expect(jumpActions).toContainEqual({
+      type: 'jumpSequence',
+      source: 'C3',
+      path: ['E5'],
+    });
+    expect(jumpActions).not.toContainEqual({
+      type: 'jumpSequence',
+      source: 'C3',
+      path: ['A1'],
+    });
+  });
+
   it('rejects illegal jumps over stacks and onto occupied cells', () => {
     const stackState = gameStateWithBoard(
       boardWithPieces({

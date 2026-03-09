@@ -62,7 +62,7 @@ describe('game engine', () => {
     expect(getJumpContinuationTargets(state, 'A1', ['C3'])).toEqual(['E5']);
   });
 
-  it('rejects jump chains that repeat an earlier in-chain position', () => {
+  it('requires jump chains to be executed one landing at a time', () => {
     const state = gameStateWithBoard(
       boardWithPieces({
         A1: [checker('white')],
@@ -95,7 +95,7 @@ describe('game engine', () => {
       ),
     ).toEqual({
       valid: false,
-      reason: 'Jump path repeats a previous position at A1.',
+      reason: 'Jump actions are applied one landing at a time.',
     });
   });
 
@@ -135,6 +135,93 @@ describe('game engine', () => {
     );
 
     expect(afterThaw.board.B2.checkers[0].frozen).toBe(false);
+  });
+
+  it('allows only owner to jump over frozen single checker', () => {
+    const blockedState = gameStateWithBoard(
+      boardWithPieces({
+        A1: [checker('black')],
+        B2: [checker('white', true)],
+        F6: [checker('white')],
+      }),
+      {
+        currentPlayer: 'black',
+      },
+    );
+
+    expect(
+      validateAction(
+        blockedState,
+        {
+          type: 'jumpSequence',
+          source: 'A1',
+          path: ['C3'],
+        },
+        withConfig(),
+      ),
+    ).toEqual({ valid: false, reason: 'Cannot jump over B2.' });
+
+    const ownerState = gameStateWithBoard(
+      boardWithPieces({
+        A1: [checker('white')],
+        B2: [checker('white', true)],
+        F6: [checker('black')],
+      }),
+    );
+    const afterOwnerJump = applyAction(
+      ownerState,
+      {
+        type: 'jumpSequence',
+        source: 'A1',
+        path: ['C3'],
+      },
+      withConfig(),
+    );
+
+    expect(afterOwnerJump.board.B2.checkers[0].frozen).toBe(false);
+  });
+
+  it('keeps turn ownership on jump continuation and allows manual next-segment choice', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        A1: [checker('white')],
+        B2: [checker('white')],
+        C4: [checker('black')],
+        D4: [checker('black')],
+        F6: [checker('black')],
+      }),
+    );
+    const afterFirstJump = applyAction(
+      state,
+      {
+        type: 'jumpSequence',
+        source: 'A1',
+        path: ['C3'],
+      },
+      withConfig(),
+    );
+
+    expect(afterFirstJump.currentPlayer).toBe('white');
+    const jumpActions = getLegalActionsForCell(afterFirstJump, 'C3', withConfig()).filter(
+      (action) => action.type === 'jumpSequence',
+    );
+    expect(jumpActions).toContainEqual({
+      type: 'jumpSequence',
+      source: 'C3',
+      path: ['E5'],
+    });
+
+    const afterSecondJump = applyAction(
+      afterFirstJump,
+      {
+        type: 'jumpSequence',
+        source: 'C3',
+        path: ['E5'],
+      },
+      withConfig(),
+    );
+
+    expect(afterSecondJump.currentPlayer).toBe('black');
   });
 
   it('rejects illegal jumps over stacks and onto occupied cells', () => {
@@ -227,6 +314,164 @@ describe('game engine', () => {
 
     expect(afterSplitTwo.board.C3.checkers).toHaveLength(1);
     expect(afterSplitTwo.board.C4.checkers).toHaveLength(2);
+  });
+
+  it('supports one-step movement from active singles and controlled stacks onto adjacent empty cells', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        B2: [checker('white')],
+        F6: [checker('black')],
+      }),
+    );
+    const singleActions = getLegalActionsForCell(state, 'B2', withConfig()).filter(
+      (action) => action.type === 'moveSingleToEmpty',
+    );
+
+    expect(singleActions).toHaveLength(8);
+    expect(singleActions).toContainEqual({
+      type: 'moveSingleToEmpty',
+      source: 'B2',
+      target: 'A1',
+    });
+    expect(singleActions).toContainEqual({
+      type: 'moveSingleToEmpty',
+      source: 'B2',
+      target: 'C3',
+    });
+
+    const afterStep = applyAction(
+      state,
+      {
+        type: 'moveSingleToEmpty',
+        source: 'B2',
+        target: 'A1',
+      },
+      withConfig(),
+    );
+
+    expect(afterStep.board.B2.checkers).toHaveLength(0);
+    expect(afterStep.board.A1.checkers).toHaveLength(1);
+    expect(afterStep.board.A1.checkers[0].owner).toBe('white');
+
+    const stackState = gameStateWithBoard(
+      boardWithPieces({
+        C3: [checker('white'), checker('white')],
+        F6: [checker('black')],
+      }),
+    );
+    const stackActions = getLegalActionsForCell(stackState, 'C3', withConfig()).filter(
+      (action) => action.type === 'moveSingleToEmpty',
+    );
+
+    expect(stackActions).toContainEqual({
+      type: 'moveSingleToEmpty',
+      source: 'C3',
+      target: 'D4',
+    });
+
+    const afterStackStep = applyAction(
+      stackState,
+      {
+        type: 'moveSingleToEmpty',
+        source: 'C3',
+        target: 'D4',
+      },
+      withConfig(),
+    );
+
+    expect(afterStackStep.board.C3.checkers).toHaveLength(0);
+    expect(afterStackStep.board.D4.checkers).toHaveLength(2);
+  });
+
+  it('rejects one-step single movement from frozen pieces or onto occupied cells', () => {
+    const frozenState = gameStateWithBoard(
+      boardWithPieces({
+        B2: [checker('white', true)],
+        F6: [checker('black')],
+      }),
+    );
+
+    expect(getLegalActionsForCell(frozenState, 'B2', withConfig())).toEqual([
+      {
+        type: 'manualUnfreeze',
+        coord: 'B2',
+      },
+    ]);
+
+    const occupiedTargetState = gameStateWithBoard(
+      boardWithPieces({
+        B2: [checker('white')],
+        C3: [checker('black')],
+        F6: [checker('black')],
+      }),
+    );
+
+    expect(
+      validateAction(
+        occupiedTargetState,
+        {
+          type: 'moveSingleToEmpty',
+          source: 'B2',
+          target: 'C3',
+        },
+        withConfig(),
+      ).valid,
+    ).toBe(false);
+
+    const frozenTargetState = gameStateWithBoard(
+      boardWithPieces({
+        B2: [checker('white')],
+        C3: [checker('black', true)],
+        F6: [checker('black')],
+      }),
+    );
+
+    expect(
+      validateAction(
+        frozenTargetState,
+        {
+          type: 'moveSingleToEmpty',
+          source: 'B2',
+          target: 'C3',
+        },
+        withConfig(),
+      ).valid,
+    ).toBe(false);
+  });
+
+  it('applies legal stack jump segments and records history correctly', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        B2: [checker('white'), checker('white')],
+        C3: [checker('black')],
+        F6: [checker('black')],
+      }),
+    );
+    const actions = getLegalActionsForCell(state, 'B2', withConfig());
+
+    expect(actions).toContainEqual({
+      type: 'jumpSequence',
+      source: 'B2',
+      path: ['D4'],
+    });
+
+    const afterJump = applyAction(
+      state,
+      {
+        type: 'jumpSequence',
+        source: 'B2',
+        path: ['D4'],
+      },
+      withConfig(),
+    );
+
+    expect(afterJump.board.B2.checkers).toHaveLength(0);
+    expect(afterJump.board.D4.checkers).toHaveLength(2);
+    expect(afterJump.history.at(-1)?.action).toEqual({
+      type: 'jumpSequence',
+      source: 'B2',
+      path: ['D4'],
+    });
   });
 
   it('prevents climbing onto a frozen checker and stack heights above three', () => {
@@ -344,10 +589,9 @@ describe('game engine', () => {
     });
   });
 
-  it('handles automatic passes and stalemate draws', () => {
+  it('handles automatic passes when the next player has no legal actions', () => {
     const activeBoard = boardWithPieces({
       A1: [checker('white'), checker('white')],
-      F6: [checker('black')],
     });
     const activeState = gameStateWithBoard(activeBoard);
     const afterMove = applyAction(
@@ -362,20 +606,6 @@ describe('game engine', () => {
 
     expect(afterMove.currentPlayer).toBe('white');
     expect(afterMove.history[0].autoPasses).toEqual(['black']);
-
-    const stalemateState = gameStateWithBoard(
-      boardWithPieces({
-        A1: [checker('white', true)],
-        F6: [checker('black')],
-      }),
-    );
-    const afterUnfreeze = applyAction(
-      stalemateState,
-      { type: 'manualUnfreeze', coord: 'A1' },
-      withConfig(),
-    );
-
-    expect(afterUnfreeze.victory).toEqual({ type: 'stalemateDraw' });
   });
 
   it('marks threefold repetition draws from position counts', () => {

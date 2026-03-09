@@ -196,6 +196,7 @@ function assertAction(value: unknown): TurnAction {
         path: value.path.map((entry, index) => assertCoord(entry, `jumpSequence.path[${index}]`)),
       };
     case 'climbOne':
+    case 'moveSingleToEmpty':
     case 'splitOneFromStack':
     case 'splitTwoFromStack':
     case 'friendlyStackTransfer':

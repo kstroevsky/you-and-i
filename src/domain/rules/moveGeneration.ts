@@ -53,6 +53,7 @@ export function createEmptyTargetMap(): TargetMap {
     jumpSequence: [],
     manualUnfreeze: [],
     climbOne: [],
+    moveSingleToEmpty: [],
     splitOneFromStack: [],
     splitTwoFromStack: [],
     friendlyStackTransfer: [],
@@ -204,6 +205,19 @@ function getClimbTargets(board: Board, source: Coord): Coord[] {
     const target = getAdjacentCoord(source, direction);
 
     if (!target || !canLandOnOccupiedCell(board, target)) {
+      return [];
+    }
+
+    return [target];
+  });
+}
+
+/** Returns adjacent empty targets used by one-step single-checker movement. */
+function getSingleStepTargets(board: Board, source: Coord): Coord[] {
+  return DIRECTION_VECTORS.flatMap((direction) => {
+    const target = getAdjacentCoord(source, direction);
+
+    if (!target || !isEmptyCell(board, target)) {
       return [];
     }
 
@@ -393,6 +407,16 @@ export function getLegalActionsForCell(
     })),
   );
 
+  if (isPlayerSingle || isPlayerStack) {
+    actions.push(
+      ...getSingleStepTargets(state.board, coord).map((target) => ({
+        type: 'moveSingleToEmpty' as const,
+        source: coord,
+        target,
+      })),
+    );
+  }
+
   if (isPlayerStack) {
     actions.push(
       ...splitTargets.map((target) => ({
@@ -446,6 +470,12 @@ function actionsEqual(left: TurnAction, right: TurnAction): boolean {
       );
     case 'climbOne':
       return right.type === 'climbOne' && left.source === right.source && left.target === right.target;
+    case 'moveSingleToEmpty':
+      return (
+        right.type === 'moveSingleToEmpty' &&
+        left.source === right.source &&
+        left.target === right.target
+      );
     case 'splitOneFromStack':
       return (
         right.type === 'splitOneFromStack' &&
@@ -541,6 +571,7 @@ export function validateAction(
       return { valid: true };
     }
     case 'climbOne':
+    case 'moveSingleToEmpty':
     case 'splitOneFromStack':
     case 'splitTwoFromStack':
     case 'friendlyStackTransfer': {
@@ -605,6 +636,14 @@ export function applyValidatedActionToBoard(
       ensureMutableCell(board, action.source, clonedCoords);
       ensureMutableCell(board, action.target, clonedCoords);
       const movingCheckers = removeTopCheckers(board, action.source, 1);
+      addCheckers(board, action.target, movingCheckers);
+      return board;
+    }
+    case 'moveSingleToEmpty': {
+      ensureMutableCell(board, action.source, clonedCoords);
+      ensureMutableCell(board, action.target, clonedCoords);
+      const movingCount = isStack(board, action.source) ? getCellHeight(board, action.source) : 1;
+      const movingCheckers = removeTopCheckers(board, action.source, movingCount);
       addCheckers(board, action.target, movingCheckers);
       return board;
     }

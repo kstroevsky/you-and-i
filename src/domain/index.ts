@@ -28,6 +28,7 @@ export type {
   Coord,
   FriendlyStackTransferAction,
   GameState,
+  MoveSingleToEmptyAction,
   Player,
   RuleConfig,
   ScoreSummary,

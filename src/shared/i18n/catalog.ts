@@ -21,6 +21,8 @@ const TEXT = {
     moveInput: 'Move input',
     noActionsSelected: 'Select a checker or controlled stack to see actions.',
     finishJump: 'Finish jump',
+    jumpPathLabel: 'Jump path',
+    jumpPathHint: 'Choose each highlighted landing manually. The jump is applied after the final landing.',
     clear: 'Clear',
     scoreMode: 'Score mode',
     rulesAndSession: 'Rules and session',
@@ -69,6 +71,8 @@ const TEXT = {
     moveInput: 'Выбор действия',
     noActionsSelected: 'Выберите шашку или свою горку, чтобы увидеть ходы.',
     finishJump: 'Завершить прыжок',
+    jumpPathLabel: 'Путь прыжка',
+    jumpPathHint: 'Выбирайте каждую подсвеченную цель вручную. Прыжок применяется после последней точки.',
     clear: 'Сбросить',
     scoreMode: 'Подсчёт',
     rulesAndSession: 'Правила и партия',
@@ -126,6 +130,8 @@ export function actionLabel(language: Language, actionKind: ActionKind): string 
       return language === 'russian' ? 'Разморозка' : 'Unfreeze';
     case 'climbOne':
       return language === 'russian' ? 'Восхождение' : 'Climb';
+    case 'moveSingleToEmpty':
+      return language === 'russian' ? 'Шаг на пустую' : 'Step to empty';
     case 'splitOneFromStack':
       return language === 'russian' ? 'Сход 1' : 'Split 1';
     case 'splitTwoFromStack':
@@ -185,6 +191,7 @@ export function formatAction(language: Language, action: TurnAction): string {
     case 'jumpSequence':
       return `${actionLabel(language, action.type)} ${action.source} -> ${action.path.join(' -> ')}`;
     case 'climbOne':
+    case 'moveSingleToEmpty':
     case 'splitOneFromStack':
     case 'splitTwoFromStack':
     case 'friendlyStackTransfer':

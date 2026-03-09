@@ -2,7 +2,7 @@ import { startTransition, useDeferredValue } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { RULE_TOGGLE_DESCRIPTORS } from '@/domain';
-import type { ActionKind, GameState, Victory } from '@/domain';
+import type { GameState, Victory } from '@/domain';
 import { useGameStore } from '@/app/providers/GameStoreProvider';
 import type { GlossaryTermId } from '@/features/glossary/terms';
 import {
@@ -83,18 +83,18 @@ function MoveInputSection() {
     draftJumpPath,
     language,
     selectedActionType,
+    selectedCell,
     onCancel,
     onChooseAction,
-    onFinishJump,
   } = useGameStore(
     useShallow((state) => ({
       availableActionKinds: state.availableActionKinds,
       draftJumpPath: state.draftJumpPath,
       language: state.preferences.language,
       selectedActionType: state.selectedActionType,
+      selectedCell: state.selectedCell,
       onCancel: state.cancelInteraction,
       onChooseAction: state.chooseActionType,
-      onFinishJump: state.finishJumpSequence,
     })),
   );
 
@@ -122,11 +122,13 @@ function MoveInputSection() {
         )}
       </div>
       {selectedActionType === 'jumpSequence' && draftJumpPath.length ? (
-        <div className="inline-actions">
-          <button type="button" className="button" onClick={onFinishJump}>
-            {text(language, 'finishJump')}
-          </button>
-        </div>
+        <>
+          <p className="panel__text">
+            <strong>{text(language, 'jumpPathLabel')}:</strong>{' '}
+            {selectedCell} {'->'} {draftJumpPath.join(' -> ')}
+          </p>
+          <p className="panel__text">{text(language, 'jumpPathHint')}</p>
+        </>
       ) : null}
       <div className="inline-actions">
         <button type="button" className="button button--ghost" onClick={onCancel}>

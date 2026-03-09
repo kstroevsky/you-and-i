@@ -4,6 +4,7 @@ export type GlossaryTermId =
   | 'jumpSequence'
   | 'manualUnfreeze'
   | 'climbOne'
+  | 'moveSingleToEmpty'
   | 'splitOneFromStack'
   | 'splitTwoFromStack'
   | 'friendlyStackTransfer'
@@ -51,6 +52,16 @@ const GLOSSARY: Record<GlossaryTermId, GlossaryEntry> = {
     description: {
       english: 'Move one active top checker onto an adjacent active occupied cell to build or change a stack.',
       russian: 'Перенести одну активную верхнюю шашку на соседнюю занятую активную клетку, чтобы создать горку или сменить контроль.',
+    },
+  },
+  moveSingleToEmpty: {
+    title: {
+      english: 'Step to empty',
+      russian: 'Шаг на пустую',
+    },
+    description: {
+      english: 'Move an active single checker or a controlled stack exactly one cell in any direction onto an adjacent empty cell.',
+      russian: 'Переместить активную одиночную шашку или контролируемую горку ровно на одну клетку в любом направлении на соседнюю пустую клетку.',
     },
   },
   splitOneFromStack: {

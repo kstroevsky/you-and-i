@@ -41,6 +41,12 @@ export type ClimbOneAction = {
   target: Coord;
 };
 
+export type MoveSingleToEmptyAction = {
+  type: 'moveSingleToEmpty';
+  source: Coord;
+  target: Coord;
+};
+
 export type SplitOneFromStackAction = {
   type: 'splitOneFromStack';
   source: Coord;
@@ -63,6 +69,7 @@ export type TurnAction =
   | JumpSequenceAction
   | ManualUnfreezeAction
   | ClimbOneAction
+  | MoveSingleToEmptyAction
   | SplitOneFromStackAction
   | SplitTwoFromStackAction
   | FriendlyStackTransferAction;

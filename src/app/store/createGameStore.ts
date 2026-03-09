@@ -590,7 +590,7 @@ export function createGameStore(options: StoreOptions = {}) {
           state.legalTargets.includes(coord)
         ) {
           if (state.selectedActionType === 'jumpSequence') {
-            // Jump selection is incremental: each click extends path until no continuation exists.
+            // Jump selection is fully manual: each click appends one landing.
             const nextPath = [...state.draftJumpPath, coord];
             const nextTargets = uniqueValues(
               getJumpContinuationTargets(state.gameState, state.selectedCell, nextPath),
@@ -624,6 +624,15 @@ export function createGameStore(options: StoreOptions = {}) {
             source: state.selectedCell,
             target: coord,
           } as TurnAction);
+          return;
+        }
+
+        if (
+          state.selectedActionType === 'jumpSequence' &&
+          state.selectedCell &&
+          state.interaction.type === 'buildingJumpChain'
+        ) {
+          // While building a jump chain, ignore non-target clicks to avoid accidental resets.
           return;
         }
 

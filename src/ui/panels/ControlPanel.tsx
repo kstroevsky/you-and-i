@@ -214,30 +214,20 @@ function ScoreSection() {
 
 function RulesSessionSection() {
   const {
-    canRedo,
-    canUndo,
-    historyCursor,
     language,
     preferences,
     ruleConfig,
-    onRedo,
     onRestart,
     onSetPreference,
     onSetRuleConfig,
-    onUndo,
   } = useGameStore(
     useShallow((state) => ({
-      canRedo: state.future.length > 0,
-      canUndo: state.past.length > 0,
-      historyCursor: state.historyCursor,
       language: state.preferences.language,
       preferences: state.preferences,
       ruleConfig: state.ruleConfig,
-      onRedo: state.redo,
       onRestart: state.restart,
       onSetPreference: state.setPreference,
       onSetRuleConfig: state.setRuleConfig,
-      onUndo: state.undo,
     })),
   );
 
@@ -283,32 +273,31 @@ function RulesSessionSection() {
         </div>
       </div>
       <div className="inline-actions">
-        <button type="button" className="button button--ghost" onClick={onUndo} disabled={!canUndo}>
-          {text(language, 'undo')}
-        </button>
-        <button type="button" className="button button--ghost" onClick={onRedo} disabled={!canRedo}>
-          {text(language, 'redo')}
-        </button>
         <button type="button" className="button" onClick={onRestart}>
           {text(language, 'restart')}
         </button>
       </div>
-      <p className="panel__text">
-        <strong>{text(language, 'historyCursor')}:</strong> {historyCursor}
-      </p>
     </section>
   );
 }
 
 function HistorySection() {
-  const { historyCursor, language, turnLog } = useGameStore(
+  const { canRedo, canUndo, historyCursor, language, onGoToHistoryCursor, onRedo, onUndo, turnLog } = useGameStore(
     useShallow((state) => ({
+      canRedo: state.future.length > 0,
+      canUndo: state.past.length > 0,
       historyCursor: state.historyCursor,
       language: state.preferences.language,
+      onGoToHistoryCursor: state.goToHistoryCursor,
+      onRedo: state.redo,
+      onUndo: state.undo,
       turnLog: state.turnLog,
     })),
   );
-  const deferredHistory = useDeferredValue(turnLog.slice(0, historyCursor));
+  const deferredTurnLog = useDeferredValue(turnLog);
+  const historyEntries = deferredTurnLog
+    .map((record, index) => ({ record, index }))
+    .reverse();
 
   return (
     <section className="panel">
@@ -316,10 +305,34 @@ function HistorySection() {
         <h2>{text(language, 'history')}</h2>
       </div>
       <ol className="history-list">
-        {[...deferredHistory].reverse().map((record, index) => (
-          <li key={`${record.positionHash}-${index}`}>{formatTurnRecord(language, record)}</li>
-        ))}
+        {historyEntries.map(({ record, index }) => {
+          const isFuture = index >= historyCursor;
+
+          return (
+            <li key={`${record.positionHash}-${index}`}>
+              <button
+                type="button"
+                className={isFuture ? 'history-item history-item--future' : 'history-item'}
+                onClick={() => onGoToHistoryCursor(index + 1)}
+                disabled={index + 1 === historyCursor}
+              >
+                {formatTurnRecord(language, record)}
+              </button>
+            </li>
+          );
+        })}
       </ol>
+      <div className="inline-actions">
+        <button type="button" className="button button--ghost" onClick={onUndo} disabled={!canUndo}>
+          {text(language, 'undo')}
+        </button>
+        <button type="button" className="button button--ghost" onClick={onRedo} disabled={!canRedo}>
+          {text(language, 'redo')}
+        </button>
+      </div>
+      <p className="panel__text">
+        <strong>{text(language, 'historyCursor')}:</strong> {historyCursor}
+      </p>
     </section>
   );
 }
@@ -388,9 +401,9 @@ export function ControlPanel() {
     <aside className="side-panel">
       <StatusSection />
       <MoveInputSection />
+      <HistorySection />
       <ScoreSection />
       <RulesSessionSection />
-      <HistorySection />
       <ExportImportSection />
     </aside>
   );

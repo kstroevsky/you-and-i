@@ -83,6 +83,90 @@ describe('createGameStore', () => {
     expect(store.getState().gameState.positionCounts).toEqual(state2.positionCounts);
   });
 
+  it('matches repeated undo/redo when traveling to a cursor directly', () => {
+    const config = withConfig();
+    const state0 = createInitialState(config);
+    const state1 = applyAction(state0, { type: 'climbOne', source: 'A1', target: 'B2' }, config);
+    const state2 = applyAction(state1, getLegalActions(state1, config)[0], config);
+    const state3 = applyAction(state2, getLegalActions(state2, config)[0], config);
+    const session = createSession(state3, {
+      turnLog: state3.history,
+      past: [undoFrame(state0), undoFrame(state1), undoFrame(state2)],
+    });
+    const byButtons = createGameStore({
+      initialSession: session,
+      storage: undefined,
+    });
+    const byCursor = createGameStore({
+      initialSession: session,
+      storage: undefined,
+    });
+
+    byButtons.getState().undo();
+    byButtons.getState().undo();
+    byButtons.getState().redo();
+
+    byCursor.getState().goToHistoryCursor(1);
+    byCursor.getState().goToHistoryCursor(2);
+
+    expect(byCursor.getState().historyCursor).toBe(byButtons.getState().historyCursor);
+    expect(byCursor.getState().gameState).toEqual(byButtons.getState().gameState);
+    expect(byCursor.getState().past).toEqual(byButtons.getState().past);
+    expect(byCursor.getState().future).toEqual(byButtons.getState().future);
+  });
+
+  it('erases future branch after new move from rewound history', () => {
+    const config = withConfig();
+    const state0 = createInitialState(config);
+    const state1 = applyAction(state0, { type: 'climbOne', source: 'A1', target: 'B2' }, config);
+    const state2 = applyAction(state1, getLegalActions(state1, config)[0], config);
+    const store = createGameStore({
+      initialSession: createSession(state2, {
+        turnLog: state2.history,
+        past: [undoFrame(state0), undoFrame(state1)],
+      }),
+      storage: undefined,
+    });
+
+    store.getState().undo();
+
+    expect(store.getState().future).toHaveLength(1);
+    expect(store.getState().historyCursor).toBe(1);
+
+    const source = store.getState().selectableCoords[0];
+    expect(source).toBeDefined();
+    if (!source) {
+      return;
+    }
+
+    store.getState().selectCell(source);
+
+    const actionType = store.getState().availableActionKinds[0];
+    expect(actionType).toBeDefined();
+    if (!actionType) {
+      return;
+    }
+
+    store.getState().chooseActionType(actionType);
+
+    if (actionType !== 'manualUnfreeze') {
+      const target = store.getState().legalTargets[0];
+      expect(target).toBeDefined();
+      if (!target) {
+        return;
+      }
+      store.getState().selectCell(target);
+    }
+
+    expect(store.getState().historyCursor).toBe(2);
+    expect(store.getState().future).toHaveLength(0);
+    expect(store.getState().turnLog).toHaveLength(store.getState().historyCursor);
+
+    const cursorBeforeRedo = store.getState().historyCursor;
+    store.getState().redo();
+    expect(store.getState().historyCursor).toBe(cursorBeforeRedo);
+  });
+
   it('shows single-step move targets and commits moveSingleToEmpty from store flow', () => {
     const state = gameStateWithBoard(
       boardWithPieces({

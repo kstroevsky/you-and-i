@@ -61,6 +61,7 @@ export type GameStoreState = GameStoreData & {
   acknowledgePassScreen: () => void;
   cancelInteraction: () => void;
   chooseActionType: (actionType: ActionKind) => void;
+  goToHistoryCursor: (targetCursor: number) => void;
   importSessionFromBuffer: () => void;
   redo: () => void;
   refreshExportBuffer: () => void;
@@ -487,6 +488,90 @@ export function createGameStore(options: StoreOptions = {}) {
       persistSession(session, storage);
     }
 
+    /** Produces one undo/redo transition payload without mutating store state. */
+    function getHistoryStepData(
+      state: Pick<
+        GameStoreData,
+        'ruleConfig' | 'preferences' | 'gameState' | 'turnLog' | 'past' | 'future'
+      >,
+      direction: 'backward' | 'forward',
+    ): Pick<
+      GameStoreData,
+      | 'ruleConfig'
+      | 'preferences'
+      | 'gameState'
+      | 'turnLog'
+      | 'past'
+      | 'future'
+      | 'historyCursor'
+      | 'selectableCoords'
+      | 'scoreSummary'
+    > | null {
+      if (direction === 'backward') {
+        const previous = state.past.at(-1);
+
+        if (!previous) {
+          return null;
+        }
+
+        const previousGameState = restoreGameState(previous, state.turnLog);
+        const nextPast = state.past.slice(0, -1);
+        const nextFuture = [createUndoFrame(state.gameState), ...state.future];
+        const nextBoardDerivation = getBoardDerivation(previousGameState, state.ruleConfig);
+
+        return {
+          ruleConfig: state.ruleConfig,
+          preferences: state.preferences,
+          gameState: previousGameState,
+          turnLog: state.turnLog,
+          past: nextPast,
+          future: nextFuture,
+          historyCursor: previous.historyCursor,
+          ...nextBoardDerivation,
+        };
+      }
+
+      const next = state.future[0];
+
+      if (!next) {
+        return null;
+      }
+
+      const nextGameState = restoreGameState(next, state.turnLog);
+      const nextPast = [...state.past, createUndoFrame(state.gameState)];
+      const nextFuture = state.future.slice(1);
+      const nextBoardDerivation = getBoardDerivation(nextGameState, state.ruleConfig);
+
+      return {
+        ruleConfig: state.ruleConfig,
+        preferences: state.preferences,
+        gameState: nextGameState,
+        turnLog: state.turnLog,
+        past: nextPast,
+        future: nextFuture,
+        historyCursor: next.historyCursor,
+        ...nextBoardDerivation,
+      };
+    }
+
+    /** Applies a single backward/forward history step and persists state. */
+    function applyHistoryStep(direction: 'backward' | 'forward'): boolean {
+      const state = get();
+      const nextData = getHistoryStepData(state, direction);
+
+      if (!nextData) {
+        return false;
+      }
+
+      set({
+        ...nextData,
+        ...createIdleSelection(nextData.gameState),
+      });
+      persistCurrentState(nextData);
+
+      return true;
+    }
+
     return {
       ...initialRuntimeState,
       ...initialBoardDerivation,
@@ -597,6 +682,26 @@ export function createGameStore(options: StoreOptions = {}) {
           ),
         });
       },
+      goToHistoryCursor: (targetCursor) => {
+        const initialState = get();
+        const normalizedTarget = Number.isInteger(targetCursor)
+          ? Math.max(0, Math.min(targetCursor, initialState.turnLog.length))
+          : initialState.historyCursor;
+
+        if (normalizedTarget === initialState.historyCursor) {
+          return;
+        }
+
+        const direction = normalizedTarget < initialState.historyCursor ? 'backward' : 'forward';
+
+        while (get().historyCursor !== normalizedTarget) {
+          const moved = applyHistoryStep(direction);
+
+          if (!moved) {
+            break;
+          }
+        }
+      },
       importSessionFromBuffer: () => {
         const state = get();
 
@@ -610,33 +715,7 @@ export function createGameStore(options: StoreOptions = {}) {
         }
       },
       redo: () => {
-        const state = get();
-        const next = state.future[0];
-
-        if (!next) {
-          return;
-        }
-
-        const nextGameState = restoreGameState(next, state.turnLog);
-        const nextPast = [...state.past, createUndoFrame(state.gameState)];
-        const nextFuture = state.future.slice(1);
-        const nextBoardDerivation = getBoardDerivation(nextGameState, state.ruleConfig);
-        const nextData = {
-          ruleConfig: state.ruleConfig,
-          preferences: state.preferences,
-          gameState: nextGameState,
-          turnLog: state.turnLog,
-          past: nextPast,
-          future: nextFuture,
-          historyCursor: next.historyCursor,
-          ...nextBoardDerivation,
-        };
-
-        set({
-          ...nextData,
-          ...createIdleSelection(nextGameState),
-        });
-        persistCurrentState(nextData);
+        applyHistoryStep('forward');
       },
       refreshExportBuffer: () => {
         const state = get();
@@ -811,33 +890,7 @@ export function createGameStore(options: StoreOptions = {}) {
         persistCurrentState(nextData);
       },
       undo: () => {
-        const state = get();
-        const previous = state.past.at(-1);
-
-        if (!previous) {
-          return;
-        }
-
-        const previousGameState = restoreGameState(previous, state.turnLog);
-        const nextPast = state.past.slice(0, -1);
-        const nextFuture = [createUndoFrame(state.gameState), ...state.future];
-        const nextBoardDerivation = getBoardDerivation(previousGameState, state.ruleConfig);
-        const nextData = {
-          ruleConfig: state.ruleConfig,
-          preferences: state.preferences,
-          gameState: previousGameState,
-          turnLog: state.turnLog,
-          past: nextPast,
-          future: nextFuture,
-          historyCursor: previous.historyCursor,
-          ...nextBoardDerivation,
-        };
-
-        set({
-          ...nextData,
-          ...createIdleSelection(previousGameState),
-        });
-        persistCurrentState(nextData);
+        applyHistoryStep('backward');
       },
     };
   });

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
-import instructionEn from '../../../instruction.md?raw';
-import instructionRu from '../../../instruction.ru.md?raw';
+import instructionEn from '../../../docs/instruction.md?raw';
+import instructionRu from '../../../docs/instruction.ru.md?raw';
 
 import { text } from '@/shared/i18n/catalog';
 import type { Language } from '@/shared/i18n/types';

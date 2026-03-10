@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { GameResultModal } from '@/app/components/GameResultModal/GameResultModal';
 import { AppHeader } from '@/app/components/AppHeader';
 import type { AppTab } from '@/app/components/AppTabs';
 import { TabLoading } from '@/app/components/TabLoading';
@@ -46,6 +47,7 @@ export function App() {
       </main>
 
       <TurnOverlay />
+      <GameResultModal />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -145,6 +145,26 @@ describe('App', () => {
 
     expect(screen.getAllByText('Ничья по трёхкратному повторению')).not.toHaveLength(0);
     expect(screen.queryByRole('button', { name: 'Восхождение' })).not.toBeInTheDocument();
+  });
+
+  it('shows a final-result modal for finished games and lets the user dismiss it', async () => {
+    const user = userEvent.setup();
+    const session: SerializableSession = createSession({
+      ...createInitialState(),
+      status: 'gameOver',
+      victory: { type: 'threefoldDraw' },
+    });
+
+    renderApp(session);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Ничья' });
+
+    expect(within(dialog).getByText('Итог партии')).toBeInTheDocument();
+    expect(within(dialog).getByText('Ничья по трёхкратному повторению')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Ничья' })).not.toBeInTheDocument();
   });
 
   it(

@@ -1,0 +1,50 @@
+@use '../../../styles/tokens' as tokens;
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(16, 11, 7, 0.58);
+}
+
+.panel {
+  width: min(420px, 100%);
+  padding: 22px;
+  border: 1px solid tokens.$color-brown-850;
+  border-radius: tokens.$radius-lg;
+  background: tokens.$color-cream-50;
+  box-shadow: tokens.$shadow-tooltip;
+  text-align: center;
+
+  h2 {
+    margin: 0 0 8px;
+    color: tokens.$color-heading;
+    font-size: 1.55rem;
+    line-height: 1.05;
+  }
+}
+
+.kicker {
+  margin: 0 0 10px;
+  color: tokens.$color-subtle;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summary {
+  margin: 0;
+  color: tokens.$color-panel-text;
+  font-size: 1rem;
+}
+
+.actions {
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+}

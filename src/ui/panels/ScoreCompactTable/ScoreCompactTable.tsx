@@ -63,28 +63,30 @@ export function ScoreCompactTable({ language, scoreSummary }: ScoreCompactTableP
         <strong>{text(language, 'scoreMode')}</strong>
         <GlossaryTooltip language={language} termId="scoreMode" />
       </div>
-      <div className={styles.table} role="table" aria-label={text(language, 'scoreMode')}>
-        <div className={styles.row} data-head="true" role="row">
-          <span role="columnheader" />
-          {metrics.map((metric) => (
-            <div key={metric.termId} className={styles.metricHead} role="columnheader">
-              <span>{metric.label}</span>
-              <GlossaryTooltip language={language} termId={metric.termId} />
+      <div className={styles.scrollArea}>
+        <div className={styles.table} role="table" aria-label={text(language, 'scoreMode')}>
+          <div className={styles.row} data-head="true" role="row">
+            <div className={styles.cornerCell} aria-hidden="true" />
+            {metrics.map((metric) => (
+              <div key={metric.termId} className={styles.metricHead} role="columnheader">
+                <span>{metric.label}</span>
+                <GlossaryTooltip language={language} termId={metric.termId} />
+              </div>
+            ))}
+          </div>
+          {playerRows.map((row) => (
+            <div key={row.label} className={styles.row} role="row">
+              <span className={styles.player} role="rowheader">
+                {row.label}
+              </span>
+              {row.values.map((value, index) => (
+                <span key={`${row.label}-${metrics[index].termId}`} className={styles.value} role="cell">
+                  {value}
+                </span>
+              ))}
             </div>
           ))}
         </div>
-        {playerRows.map((row) => (
-          <div key={row.label} className={styles.row} role="row">
-            <span className={styles.player} role="rowheader">
-              {row.label}
-            </span>
-            {row.values.map((value, index) => (
-              <span key={`${row.label}-${metrics[index].termId}`} role="cell">
-                {value}
-              </span>
-            ))}
-          </div>
-        ))}
       </div>
     </div>
   );

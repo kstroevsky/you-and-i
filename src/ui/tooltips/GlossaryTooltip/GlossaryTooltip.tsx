@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { getGlossaryEntry } from '@/features/glossary/terms';
@@ -13,11 +13,18 @@ type GlossaryTooltipProps = {
 };
 
 const TOOLTIP_OPEN_EVENT = 'wmbl:tooltip-open';
+const VIEWPORT_PADDING = 12;
+const TOOLTIP_GAP = 8;
 
 export function GlossaryTooltip({ language, termId }: GlossaryTooltipProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const [position, setPosition] = useState({
+    left: VIEWPORT_PADDING,
+    top: VIEWPORT_PADDING,
+    maxHeight: 220,
+    ready: false,
+  });
   const anchorRef = useRef<HTMLSpanElement | null>(null);
   const popoverRef = useRef<HTMLSpanElement | null>(null);
   const entry = getGlossaryEntry(termId, language);
@@ -80,47 +87,68 @@ export function GlossaryTooltip({ language, termId }: GlossaryTooltipProps) {
     };
   }, [open]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {
+      setPosition((current) => ({ ...current, ready: false }));
       return undefined;
     }
 
     function updatePosition() {
       const anchor = anchorRef.current;
+      const popover = popoverRef.current;
 
-      if (!anchor) {
+      if (!anchor || !popover) {
         return;
       }
 
-      const rect = anchor.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
+      const popoverRect = popover.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const clampedLeft = Math.min(
+        viewportWidth - VIEWPORT_PADDING - popoverRect.width,
+        Math.max(VIEWPORT_PADDING, anchorRect.right - popoverRect.width),
+      );
+      const spaceBelow = viewportHeight - anchorRect.bottom - TOOLTIP_GAP - VIEWPORT_PADDING;
+      const spaceAbove = anchorRect.top - TOOLTIP_GAP - VIEWPORT_PADDING;
+      const placeAbove = spaceBelow < popoverRect.height && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(96, placeAbove ? spaceAbove : spaceBelow);
+      const desiredTop = placeAbove
+        ? anchorRect.top - TOOLTIP_GAP - Math.min(popoverRect.height, maxHeight)
+        : anchorRect.bottom + TOOLTIP_GAP;
+      const clampedTop = Math.min(
+        viewportHeight - VIEWPORT_PADDING - Math.min(popoverRect.height, maxHeight),
+        Math.max(VIEWPORT_PADDING, desiredTop),
+      );
 
       setPosition({
-        top: rect.bottom + 6,
-        left: rect.right,
+        top: clampedTop,
+        left: clampedLeft,
+        maxHeight,
+        ready: true,
       });
     }
 
-    updatePosition();
+    const frameId = window.requestAnimationFrame(updatePosition);
 
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
 
     return () => {
+      window.cancelAnimationFrame(frameId);
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
   }, [open]);
 
   function toggleOpen() {
-    setOpen((value) => {
-      const next = !value;
+    const next = !open;
 
-      if (next) {
-        document.dispatchEvent(new CustomEvent(TOOLTIP_OPEN_EVENT, { detail: { id } }));
-      }
+    if (next) {
+      document.dispatchEvent(new CustomEvent(TOOLTIP_OPEN_EVENT, { detail: { id } }));
+    }
 
-      return next;
-    });
+    setOpen(next);
   }
 
   return (
@@ -144,7 +172,12 @@ export function GlossaryTooltip({ language, termId }: GlossaryTooltipProps) {
               className={styles.popover}
               role="tooltip"
               aria-label={entry.title}
-              style={{ top: position.top, left: position.left }}
+              style={{
+                top: position.top,
+                left: position.left,
+                maxHeight: position.maxHeight,
+                visibility: position.ready ? 'visible' : 'hidden',
+              }}
             >
               <strong>{entry.title}</strong>
               <span>{entry.description}</span>

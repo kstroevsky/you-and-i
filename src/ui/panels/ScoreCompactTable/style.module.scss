@@ -1,6 +1,8 @@
 @use '../../../styles/tokens' as tokens;
 
 .root {
+  --player-column-width: 68px;
+
   margin-top: 8px;
   border: 1px solid tokens.$color-panel-border-soft;
   background: tokens.$color-panel-bg-strong;
@@ -16,18 +18,27 @@
   font-size: 0.9rem;
 }
 
+.scrollArea {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
 .table {
   display: grid;
-  overflow-x: auto;
+  min-width: fit-content;
 }
 
 .row {
   display: grid;
-  grid-template-columns: 64px repeat(4, minmax(84px, 1fr));
+  grid-template-columns: var(--player-column-width) repeat(4, minmax(104px, 1fr));
   align-items: center;
   gap: 5px;
   padding: 4px 7px;
   border-bottom: 1px solid #ece0d2;
+
+  > * {
+    min-width: 0;
+  }
 
   &:last-child {
     border-bottom: none;
@@ -38,12 +49,10 @@
     font-size: 0.8rem;
     font-weight: 700;
   }
+}
 
-  span:nth-child(n + 2) {
-    text-align: center;
-    font-weight: 700;
-    color: #2d221a;
-  }
+.cornerCell {
+  min-width: var(--player-column-width);
 }
 
 .metricHead {
@@ -54,16 +63,28 @@
   color: #4a392c;
   font-size: 0.8rem;
 
-  span {
+  > span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: normal;
     line-height: 1.2;
+    text-align: left;
   }
 }
 
 .player {
+  display: flex;
+  align-items: center;
   color: #4a392c;
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2d221a;
+  font-weight: 700;
+  text-align: center;
 }

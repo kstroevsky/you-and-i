@@ -26,12 +26,10 @@
 
 .popover {
   position: fixed;
-  transform: translateX(-100%);
   z-index: 1200;
   display: grid;
   gap: 5px;
   width: min(300px, calc(100vw - 24px));
-  max-height: min(220px, 55vh);
   overflow: auto;
   overflow-wrap: anywhere;
   padding: 10px;

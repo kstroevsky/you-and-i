@@ -1,8 +1,9 @@
+import { useEffect, useId } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useIsMobileViewport } from '@/shared/hooks/useIsMobileViewport';
 import { useGameStore } from '@/app/providers/GameStoreProvider';
-import { actionLabel, text } from '@/shared/i18n/catalog';
+import { actionLabel, describeInteraction, text } from '@/shared/i18n/catalog';
 import { Button } from '@/ui/primitives/Button';
 import { Panel } from '@/ui/primitives/Panel';
 import { GlossaryTooltip } from '@/ui/tooltips/GlossaryTooltip';
@@ -11,8 +12,10 @@ import styles from './style.module.scss';
 
 export function MoveInputPanel() {
   const isCompactViewport = useIsMobileViewport(720);
+  const titleId = useId();
   const {
     availableActionKinds,
+    interaction,
     language,
     selectedActionType,
     selectedCell,
@@ -21,6 +24,7 @@ export function MoveInputPanel() {
   } = useGameStore(
     useShallow((state) => ({
       availableActionKinds: state.availableActionKinds,
+      interaction: state.interaction,
       language: state.preferences.language,
       selectedActionType: state.selectedActionType,
       selectedCell: state.selectedCell,
@@ -29,41 +33,65 @@ export function MoveInputPanel() {
     })),
   );
 
-  const hint =
-    selectedActionType === 'jumpSequence' && selectedCell
-      ? `${text(language, 'jumpPathLabel')}: ${selectedCell}`
-      : text(language, 'noActionsSelected');
+  const isChoiceModalOpen =
+    selectedCell !== null && selectedActionType === null && availableActionKinds.length > 0;
+
+  useEffect(() => {
+    if (!isChoiceModalOpen) {
+      return undefined;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onCancel();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isChoiceModalOpen, onCancel]);
 
   return (
-    <Panel className={styles.root} data-compact={isCompactViewport || undefined}>
-      <div className={styles.titleRow}>
-        <strong>{text(language, 'moveInput')}</strong>
-        <Button className={styles.clearButton} variant="ghost" onClick={onCancel}>
-          {text(language, 'clear')}
-        </Button>
-      </div>
-      <div className={styles.actionGrid}>
-        {availableActionKinds.length ? (
-          availableActionKinds.map((actionKind) => (
-            <div key={actionKind} className={styles.actionChip}>
-              <Button
-                className={styles.actionButton}
-                variant={selectedActionType === actionKind ? 'active' : 'solid'}
-                onClick={() => onChooseAction(actionKind)}
-              >
-                {actionLabel(language, actionKind)}
+    <>
+      {isChoiceModalOpen ? (
+        <div className={styles.modalOverlay} role="presentation" onClick={onCancel}>
+          <div
+            className={styles.modalPanel}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <div>
+                <p className={styles.modalKicker}>{text(language, 'moveInput')}</p>
+                <h2 id={titleId}>{text(language, 'moveChoiceDialog')}</h2>
+              </div>
+              <Button className={styles.clearButton} variant="ghost" onClick={onCancel}>
+                {text(language, 'clear')}
               </Button>
-              <GlossaryTooltip compact={isCompactViewport} language={language} termId={actionKind} />
             </div>
-          ))
-        ) : (
-          <span className={styles.empty}>{text(language, 'moveUnavailable')}</span>
-        )}
-      </div>
-      <p className={styles.hint}>{hint}</p>
-      {selectedActionType === 'jumpSequence' && !isCompactViewport ? (
-        <p className={styles.hintSecondary}>{text(language, 'jumpPathHint')}</p>
+            <p className={styles.selectionMeta}>
+              <strong>{text(language, 'selectedCellLabel')}:</strong> {selectedCell}
+            </p>
+            <div className={styles.actionGrid}>
+              {availableActionKinds.map((actionKind) => (
+                <div key={actionKind} className={styles.actionChip}>
+                  <Button
+                    className={styles.actionButton}
+                    variant={selectedActionType === actionKind ? 'active' : 'solid'}
+                    onClick={() => onChooseAction(actionKind)}
+                  >
+                    {actionLabel(language, actionKind)}
+                  </Button>
+                  <GlossaryTooltip compact={isCompactViewport} language={language} termId={actionKind} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       ) : null}
-    </Panel>
+    </>
   );
 }

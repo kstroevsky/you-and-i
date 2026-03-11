@@ -1,4 +1,5 @@
 import { GameControlPanel } from '@/ui/panels/GameControlPanel';
+import { MoveInputPanel } from '@/ui/panels/MoveInputPanel';
 import { TurnSummaryStrip } from '@/ui/panels/StatusSection';
 import { Panel } from '@/ui/primitives/Panel';
 import { useIsMobileViewport } from '@/shared/hooks/useIsMobileViewport';
@@ -20,6 +21,7 @@ export function GameTab() {
           </div>
           <Panel className={styles.summaryPanel}>
             <TurnSummaryStrip compact />
+            <MoveInputPanel />
           </Panel>
           <MobileGameTray />
         </div>

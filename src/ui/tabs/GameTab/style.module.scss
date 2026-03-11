@@ -45,12 +45,15 @@
 }
 
 .summaryPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding: 8px 10px;
 }
 
 .mobileTray {
-  min-height: 220px;
-  max-height: min(36dvh, 320px);
+  min-height: 260px;
+  max-height: min(44dvh, 380px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
@@ -59,18 +62,24 @@
 
 .mobileTrayTabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
 .mobileTrayBody {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
 .mobileTrayPane {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .infoPane {
@@ -152,8 +161,8 @@
 
   .mobileTray {
     gap: 6px;
-    min-height: 208px;
-    max-height: min(34dvh, 288px);
+    min-height: 340px;
+    max-height: min(64dvh, 540px);
   }
 
   .mobileTrayTabs {

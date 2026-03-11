@@ -19,7 +19,7 @@
 .layout {
   --axis-col-size: 34px;
   --axis-gap: 8px;
-  --board-size: 62vh;
+  --board-size: 68vh;
 
   min-height: 0;
   display: grid;
@@ -67,12 +67,6 @@
   grid-template-columns: repeat(6, minmax(0, 1fr));
   justify-items: center;
   font-size: 1.1rem;
-}
-
-@include mixins.max-width(tokens.$bp-lg) {
-  .layout {
-    --board-size: 58vh;
-  }
 }
 
 @include mixins.max-width(tokens.$bp-md) {

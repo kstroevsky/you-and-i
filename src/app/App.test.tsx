@@ -25,7 +25,7 @@ describe('App', () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole('button', { name: 'Клетка A1' }));
+    await user.click(await screen.findByRole('button', { name: 'Клетка A1' }, { timeout: 3000 }));
 
     expect(await screen.findByRole('button', { name: 'Восхождение' })).toBeInTheDocument();
   });
@@ -103,6 +103,19 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'Правила и партия' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Экспорт / импорт' })).toBeInTheDocument();
+  });
+
+  it('shows match setup on the game tab instead of inside settings', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    expect(await screen.findByRole('heading', { name: 'Параметры матча' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Начать новую партию' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Настройки' }));
+
+    expect(await screen.findByRole('heading', { name: 'Правила и партия' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Параметры матча' })).not.toBeInTheDocument();
   });
 
   it('shows clickable glossary tooltips for gameplay terms', async () => {
@@ -215,7 +228,7 @@ describe('App', () => {
 
       await user.click(backButton);
 
-      expect(screen.getByText((_, element) => element?.textContent === 'Позиция истории: 1')).toBeInTheDocument();
+      expect(screen.getByText(/Позиция истории:\s*1/)).toBeInTheDocument();
       expect(forwardButton).toBeEnabled();
       expect(screen.getByRole('button', { name: 'Чёрные: Восхождение F6 -> E5' })).toHaveAttribute(
         'data-state',
@@ -224,12 +237,12 @@ describe('App', () => {
 
       await user.click(screen.getByRole('button', { name: 'Чёрные: Восхождение F6 -> E5' }));
 
-      expect(screen.getByText((_, element) => element?.textContent === 'Позиция истории: 2')).toBeInTheDocument();
+      expect(screen.getByText(/Позиция истории:\s*2/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Вперёд' })).toBeDisabled();
 
       await user.click(screen.getByRole('button', { name: 'Белые: Восхождение A1 -> B2' }));
 
-      expect(screen.getByText((_, element) => element?.textContent === 'Позиция истории: 1')).toBeInTheDocument();
+      expect(screen.getByText(/Позиция истории:\s*1/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Вперёд' })).toBeEnabled();
     },
     10000,

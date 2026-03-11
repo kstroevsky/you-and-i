@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import type { AiSearchResult, AiWorkerRequest, AiWorkerResponse } from '@/ai';
 import { createGameStore } from '@/app/store/createGameStore';
 import {
   applyAction,
@@ -8,6 +9,7 @@ import {
   getLegalActions,
   serializeSession,
 } from '@/domain';
+import type { MatchSettings } from '@/shared/types/session';
 import { SESSION_STORAGE_KEY } from '@/shared/constants/storage';
 import {
   boardWithPieces,
@@ -36,6 +38,37 @@ function createMemoryStorage(initialEntries: Record<string, string> = {}): Stora
       store.set(key, value);
     },
   };
+}
+
+class FakeAiWorker {
+  onerror: ((event: ErrorEvent) => void) | null = null;
+  onmessage: ((event: MessageEvent<AiWorkerResponse>) => void) | null = null;
+  requests: AiWorkerRequest[] = [];
+
+  postMessage(message: AiWorkerRequest) {
+    this.requests.push(message);
+  }
+
+  reply(result: AiSearchResult): void {
+    const request = this.requests.at(-1);
+
+    if (!request || !this.onmessage) {
+      return;
+    }
+
+    this.onmessage({
+      data: {
+        requestId: request.requestId,
+        result,
+        type: 'result',
+      },
+    } as MessageEvent<AiWorkerResponse>);
+  }
+
+  terminate() {
+    this.onmessage = null;
+    this.onerror = null;
+  }
 }
 
 describe('createGameStore', () => {
@@ -133,7 +166,7 @@ describe('createGameStore', () => {
     const initialExport = store.getState().exportBuffer;
 
     expect(initialExport).toContain('\n');
-    expect(initialExport).toContain('"version": 2');
+    expect(initialExport).toContain('"version": 3');
 
     store.getState().setImportBuffer('{"draft": true}');
     expect(store.getState().exportBuffer).toBe(initialExport);
@@ -455,5 +488,141 @@ describe('createGameStore', () => {
     expect(store.getState().selectedActionType).toBe('jumpSequence');
     expect(store.getState().legalTargets).toEqual(['E5']);
     expect(store.getState().gameState.currentPlayer).toBe('white');
+  });
+
+  it('starts a computer match as black and locks input while the AI is thinking', () => {
+    const worker = new FakeAiWorker();
+    const store = createGameStore({
+      createAiWorker: () => worker,
+      storage: undefined,
+    });
+
+    store.getState().startNewGame({
+      opponentMode: 'computer',
+      humanPlayer: 'black',
+      aiDifficulty: 'easy',
+    });
+
+    expect(store.getState().matchSettings).toEqual<MatchSettings>({
+      opponentMode: 'computer',
+      humanPlayer: 'black',
+      aiDifficulty: 'easy',
+    });
+    expect(store.getState().aiStatus).toBe('thinking');
+    expect(worker.requests).toHaveLength(1);
+
+    store.getState().selectCell('A1');
+
+    expect(store.getState().selectedCell).toBeNull();
+
+    const aiAction = getLegalActions(store.getState().gameState, store.getState().ruleConfig)[0];
+    expect(aiAction).toBeDefined();
+    if (!aiAction) {
+      return;
+    }
+
+    worker.reply({
+      action: aiAction,
+      completedDepth: 1,
+      elapsedMs: 0,
+      evaluatedNodes: 1,
+      score: 10,
+    });
+
+    const humanSource = store.getState().selectableCoords[0];
+    expect(store.getState().interaction.type).toBe('idle');
+    expect(humanSource).toBeDefined();
+    if (!humanSource) {
+      return;
+    }
+
+    store.getState().selectCell(humanSource);
+
+    expect(store.getState().selectedCell).toBe(humanSource);
+  });
+
+  it('undoes the full human-plus-computer turn pair in computer mode', () => {
+    const worker = new FakeAiWorker();
+    const store = createGameStore({
+      createAiWorker: () => worker,
+      storage: undefined,
+    });
+
+    store.getState().startNewGame({
+      opponentMode: 'computer',
+      humanPlayer: 'white',
+      aiDifficulty: 'easy',
+    });
+
+    store.getState().selectCell('A1');
+    store.getState().chooseActionType('climbOne');
+    store.getState().selectCell('B2');
+
+    expect(store.getState().historyCursor).toBe(1);
+    expect(store.getState().aiStatus).toBe('thinking');
+
+    const aiAction = getLegalActions(store.getState().gameState, store.getState().ruleConfig)[0];
+
+    worker.reply({
+      action: aiAction,
+      completedDepth: 1,
+      elapsedMs: 0,
+      evaluatedNodes: 1,
+      score: 10,
+    });
+
+    expect(store.getState().historyCursor).toBeGreaterThanOrEqual(2);
+    expect(store.getState().gameState.currentPlayer).toBe('white');
+
+    store.getState().undo();
+
+    expect(store.getState().historyCursor).toBe(0);
+    expect(store.getState().gameState.currentPlayer).toBe('white');
+  });
+
+  it('auto-schedules AI only when a loaded computer session is at the live tip', async () => {
+    const liveWorker = new FakeAiWorker();
+    createGameStore({
+      createAiWorker: () => liveWorker,
+      initialSession: createSession(createInitialState(), {
+        matchSettings: {
+          opponentMode: 'computer',
+          humanPlayer: 'black',
+          aiDifficulty: 'easy',
+        },
+      }),
+      storage: undefined,
+    });
+
+    await Promise.resolve();
+
+    expect(liveWorker.requests).toHaveLength(1);
+
+    const rewoundWorker = new FakeAiWorker();
+    const state0 = createInitialState();
+    const state1 = applyAction(
+      state0,
+      { type: 'climbOne', source: 'A1', target: 'B2' },
+      withConfig(),
+    );
+    const rewoundStore = createGameStore({
+      createAiWorker: () => rewoundWorker,
+      initialSession: createSession(state1, {
+        matchSettings: {
+          opponentMode: 'computer',
+          humanPlayer: 'black',
+          aiDifficulty: 'easy',
+        },
+        past: [undoFrame(state0)],
+        present: undoFrame(state0),
+        turnLog: state1.history,
+      }),
+      storage: undefined,
+    });
+
+    await Promise.resolve();
+
+    expect(rewoundWorker.requests).toHaveLength(0);
+    expect(rewoundStore.getState().historyCursor).toBe(0);
   });
 });

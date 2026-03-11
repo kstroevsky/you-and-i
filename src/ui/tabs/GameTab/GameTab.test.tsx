@@ -34,6 +34,7 @@ function snapshotFromState(state: GameState) {
     moveNumber: state.moveNumber,
     status: state.status,
     victory: state.victory,
+    pendingJump: state.pendingJump,
   };
 }
 
@@ -107,6 +108,21 @@ describe('GameTab compact layout', () => {
     expect(screen.getByRole('columnheader', { name: 'Чёрные' })).toBeInTheDocument();
   });
 
+  it('shows the compact match setup block inside the info tray on compact layout', async () => {
+    const user = userEvent.setup();
+    renderGameTab();
+
+    await user.click(screen.getByRole('tab', { name: 'Инфо' }));
+
+    expect(await screen.findByRole('heading', { name: 'Параметры матча' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Hot-seat' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Играть с компьютером' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Белые' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Чёрные' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Сложность' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Начать новую партию' })).toBeInTheDocument();
+  });
+
   it('shows history controls in the history tray on compact layout', async () => {
     const user = userEvent.setup();
     renderGameTab();
@@ -128,7 +144,7 @@ describe('GameTab compact layout', () => {
 
     await user.click(screen.getByRole('tab', { name: 'История' }));
 
-    expect(screen.getByText('Всего: 12')).toBeInTheDocument();
+    expect(screen.getByText(/Всего:\s*12/)).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(12);
   });
 });

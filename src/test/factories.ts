@@ -2,6 +2,7 @@ import { createUndoFrame } from '@/domain/serialization/session';
 import { createEmptyBoard } from '@/domain/model/board';
 import { hashPosition } from '@/domain/model/hash';
 import { withRuleDefaults } from '@/domain/model/ruleConfig';
+import { DEFAULT_MATCH_SETTINGS } from '@/shared/constants/match';
 import type {
   Board,
   Checker,
@@ -48,6 +49,7 @@ export function gameStateWithBoard(
     moveNumber: 1,
     status: 'active',
     victory: { type: 'none' },
+    pendingJump: null,
     history: [],
     positionCounts: {},
   };
@@ -79,9 +81,10 @@ export function createSession(
     };
 
   return {
-    version: 2,
+    version: 3,
     ruleConfig,
     preferences,
+    matchSettings: overrides.matchSettings ?? DEFAULT_MATCH_SETTINGS,
     turnLog: overrides.turnLog ?? present.history,
     present: overrides.present ?? createUndoFrame(present),
     past: overrides.past ?? [],

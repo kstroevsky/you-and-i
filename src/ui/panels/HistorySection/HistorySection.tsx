@@ -2,6 +2,7 @@ import { startTransition, useDeferredValue } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useGameStore } from '@/app/providers/GameStoreProvider';
+import { useIsMobileViewport } from '@/shared/hooks/useIsMobileViewport';
 import { formatHistorySummary, formatTurnRecord, text } from '@/shared/i18n/catalog';
 import { MatchSetupPanel } from '@/ui/panels/MatchSetupPanel';
 import { Button } from '@/ui/primitives/Button';
@@ -12,6 +13,7 @@ import styles from './style.module.scss';
 type HistoryState = 'current' | 'future' | 'past';
 
 export function HistorySection() {
+  const compactLayout = useIsMobileViewport(960);
   const { canRedo, canUndo, historyCursor, language, onGoToHistoryCursor, onRedo, onUndo, turnLog } = useGameStore(
     useShallow((state) => ({
       canRedo: state.future.length > 0,
@@ -26,6 +28,8 @@ export function HistorySection() {
   );
   const deferredTurnLog = useDeferredValue(turnLog);
   const historyEntries = deferredTurnLog.map((record, index) => ({ record, index })).reverse();
+
+  const showMatchSetup = !compactLayout;
 
   return (
     <Panel className={styles.root}>
@@ -63,9 +67,11 @@ export function HistorySection() {
           );
         })}
       </ol>
-      <div className={styles.footer}>
-        <MatchSetupPanel compact embedded />
-      </div>
+      {showMatchSetup ? (
+        <div className={styles.footer}>
+          <MatchSetupPanel compact embedded />
+        </div>
+      ) : null}
     </Panel>
   );
 }

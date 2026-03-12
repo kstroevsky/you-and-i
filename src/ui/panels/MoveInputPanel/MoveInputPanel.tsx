@@ -1,8 +1,13 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useEffectEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useGameStore } from '@/app/providers/GameStoreProvider';
 
-const MoveInputModal = lazy(() => import('./MoveInputModal').then((module) => ({ default: module.MoveInputModal })));
+const loadMoveInputModal = () => import('./MoveInputModal');
+const MoveInputModal = lazy(() => loadMoveInputModal().then((module) => ({ default: module.MoveInputModal })));
+
+export function preloadMoveInputModal(): void {
+  void loadMoveInputModal();
+}
 
 export function MoveInputPanel() {
   const {
@@ -21,26 +26,25 @@ export function MoveInputPanel() {
 
   const isChoiceModalOpen =
     selectedCell !== null && selectedActionType === null && availableActionKinds.length > 0;
+  const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      onCancel();
+    }
+  });
 
   useEffect(() => {
     if (!isChoiceModalOpen) {
       return undefined;
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        onCancel();
-      }
-    }
-
     window.addEventListener('keydown', handleKeyDown);
 
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isChoiceModalOpen, onCancel]);
+  }, [handleKeyDown, isChoiceModalOpen]);
 
   return (
-    <Suspense>
-      {isChoiceModalOpen ? <MoveInputModal/> : null}
+    <Suspense fallback={null}>
+      {isChoiceModalOpen ? <MoveInputModal /> : null}
     </Suspense>
   );
 }

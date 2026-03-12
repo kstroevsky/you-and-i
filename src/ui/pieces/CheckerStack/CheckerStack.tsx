@@ -28,6 +28,7 @@ export const CheckerStack = memo(function CheckerStack({
           <div
             key={checker.id}
             className={cx(styles.checker, checkerTone(checker.owner))}
+            data-checker-node="true"
             style={{ transform: `translateY(${offset}px)` }}
           >
             <svg viewBox="0 0 100 100" className={styles.svg}>

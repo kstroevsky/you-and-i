@@ -1,4 +1,3 @@
-import { useIsMobileViewport } from '@/shared/hooks/useIsMobileViewport';
 import type { ScoreSummary } from '@/domain';
 import type { GlossaryTermId } from '@/features/glossary/terms';
 import { text } from '@/shared/i18n/catalog';
@@ -21,8 +20,6 @@ type ScoreRow = {
 };
 
 export function ScoreCompactTable({ compact = false, language, scoreSummary }: ScoreCompactTableProps) {
-  const isCompactViewport = useIsMobileViewport(720);
-  const isCompactLayout = compact || isCompactViewport;
   const metrics: ScoreRow[] = [
     {
       label: text(language, 'scoreHomeSingles'),
@@ -62,12 +59,12 @@ export function ScoreCompactTable({ compact = false, language, scoreSummary }: S
   ];
 
   return (
-    <div className={styles.root} data-layout={isCompactLayout ? 'compact' : 'desktop'}>
+    <div className={styles.root} data-layout={compact ? 'compact' : 'desktop'}>
       <div className={styles.header}>
         <strong>{text(language, 'scoreMode')}</strong>
-        <GlossaryTooltip compact={isCompactLayout} language={language} termId="scoreMode" />
+        <GlossaryTooltip compact={compact} language={language} termId="scoreMode" />
       </div>
-      {isCompactLayout ? (
+      {compact ? (
         <div className={styles.mobileTable} role="table" aria-label={text(language, 'scoreMode')}>
           <div className={styles.mobileHead} role="row">
             <span role="columnheader" />

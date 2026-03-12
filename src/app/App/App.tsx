@@ -1,13 +1,12 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { GameResultModal } from '@/app/components/GameResultModal/GameResultModal';
 import { AppHeader } from '@/app/components/AppHeader';
 import type { AppTab } from '@/app/components/AppTabs';
 import { TabLoading } from '@/app/components/TabLoading';
-import { TurnOverlay } from '@/app/components/TurnOverlay';
 import { useGameStore } from '@/app/providers/GameStoreProvider';
 
+import { AppOverlays, preloadAppOverlays } from './AppOverlays';
 import styles from './style.module.scss';
 
 const GameTab = lazy(() => import('@/ui/tabs/GameTab').then((module) => ({ default: module.GameTab })));
@@ -18,6 +17,27 @@ const SettingsTab = lazy(() =>
   import('@/ui/tabs/SettingsTab').then((module) => ({ default: module.SettingsTab })),
 );
 
+function scheduleIdleTask(task: () => void): () => void {
+  if (typeof window === 'undefined') {
+    return () => undefined;
+  }
+
+  const browserWindow = window as Window & {
+    cancelIdleCallback?: (handle: number) => void;
+    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+  };
+
+  if (browserWindow.requestIdleCallback) {
+    const idleId = browserWindow.requestIdleCallback(() => task(), { timeout: 320 });
+
+    return () => browserWindow.cancelIdleCallback?.(idleId);
+  }
+
+  const timeoutId = globalThis.setTimeout(task, 180);
+
+  return () => globalThis.clearTimeout(timeoutId);
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('game');
   const { language, setPreference } = useGameStore(
@@ -26,6 +46,8 @@ export function App() {
       setPreference: state.setPreference,
     })),
   );
+
+  useEffect(() => scheduleIdleTask(preloadAppOverlays), []);
 
   return (
     <>
@@ -46,8 +68,7 @@ export function App() {
         </section>
       </main>
 
-      <TurnOverlay />
-      <GameResultModal />
+      <AppOverlays />
     </>
   );
 }

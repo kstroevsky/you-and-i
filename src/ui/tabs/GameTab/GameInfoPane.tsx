@@ -33,19 +33,6 @@ export function GameInfoPane() {
           <p className={styles.infoText}>{text(language, 'scoreDisabledHint')}</p>
         </Panel>
       )}
-
-      <Panel className={styles.infoCard}>
-        <div className={styles.infoHeading}>
-          <strong>{text(language, 'trayInfo')}</strong>
-        </div>
-        <p className={styles.infoRow}>
-          <strong>{text(language, 'statusLabel')}:</strong> {formatVictory(language, victory)}
-          {victoryTermId ? <GlossaryTooltip language={language} termId={victoryTermId} /> : null}
-        </p>
-        <p className={styles.infoText}>{describeInteraction(language, interaction)}</p>
-        <p className={styles.infoHint}>{text(language, 'glossaryHint')}</p>
-      </Panel>
-
       <MatchSetupPanel compact />
     </div>
   );

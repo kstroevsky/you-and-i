@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useEffectEvent, useId, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useGameStore } from '@/app/providers/GameStoreProvider';
@@ -39,6 +39,11 @@ export function GameResultModal() {
   const descriptionId = useId();
   const resultToken = getResultToken(status, historyCursor, victory);
   const [isOpen, setIsOpen] = useState(resultToken !== null);
+  const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      setIsOpen(false);
+    }
+  });
 
   useEffect(() => {
     setIsOpen(resultToken !== null);
@@ -49,16 +54,10 @@ export function GameResultModal() {
       return undefined;
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    }
-
     window.addEventListener('keydown', handleKeyDown);
 
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+  }, [handleKeyDown, isOpen]);
 
   if (!isOpen || status !== 'gameOver') {
     return null;

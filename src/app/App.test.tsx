@@ -75,7 +75,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Клетка A1' }));
     await user.click(screen.getByRole('button', { name: 'Восхождение' }));
     await user.click(screen.getByRole('button', { name: 'Клетка B2' }));
-    await user.click(screen.getByRole('button', { name: 'Продолжить' }));
+    await user.click(await screen.findByRole('button', { name: 'Продолжить' }));
     await user.click(screen.getByRole('tab', { name: 'Инструкция' }));
 
     expect(await screen.findByRole('heading', { name: 'Каноническая инструкция' })).toBeInTheDocument();
@@ -205,12 +205,12 @@ describe('App', () => {
       await user.click(await screen.findByRole('button', { name: 'Клетка A1' }));
       await user.click(screen.getByRole('button', { name: 'Восхождение' }));
       await user.click(screen.getByRole('button', { name: 'Клетка B2' }));
-      await user.click(screen.getByRole('button', { name: 'Продолжить' }));
+      await user.click(await screen.findByRole('button', { name: 'Продолжить' }));
 
       await user.click(screen.getByRole('button', { name: 'Клетка F6' }));
       await user.click(screen.getByRole('button', { name: 'Восхождение' }));
       await user.click(screen.getByRole('button', { name: 'Клетка E5' }));
-      await user.click(screen.getByRole('button', { name: 'Продолжить' }));
+      await user.click(await screen.findByRole('button', { name: 'Продолжить' }));
 
       const historyList = screen.getByRole('list');
       expect(historyList).toBeInTheDocument();

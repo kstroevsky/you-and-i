@@ -29,6 +29,16 @@ body {
   background: linear-gradient(180deg, tokens.$color-shell-top 0%, tokens.$color-shell-bottom 100%);
 }
 
+@media (max-width: tokens.$bp-md) {
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+}
+
 button,
 textarea,
 input {

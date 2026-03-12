@@ -21,7 +21,13 @@
 
 @include mixins.max-width(tokens.$bp-md) {
   .shell {
+    height: auto;
+    min-height: 100dvh;
     gap: 8px;
     padding: 8px;
+  }
+
+  .content {
+    overflow: visible;
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { getGlossaryEntry } from '@/features/glossary/terms';
@@ -19,6 +19,14 @@ const TOOLTIP_OPEN_EVENT = 'wmbl:tooltip-open';
 const VIEWPORT_PADDING = 12;
 const TOOLTIP_GAP = 8;
 const MOBILE_BREAKPOINT = 720;
+const loadGlossaryTooltipDialog = () => import('./GlossaryTooltipDialog');
+const GlossaryTooltipDialog = lazy(() =>
+  loadGlossaryTooltipDialog().then((module) => ({ default: module.GlossaryTooltipDialog })),
+);
+
+export function preloadGlossaryTooltipDialog(): void {
+  void loadGlossaryTooltipDialog();
+}
 
 export function GlossaryTooltip({ compact = false, language, termId }: GlossaryTooltipProps) {
   const id = useId();
@@ -34,20 +42,66 @@ export function GlossaryTooltip({ compact = false, language, termId }: GlossaryT
   const entry = getGlossaryEntry(termId, language);
   const isMobileViewport = useIsMobileViewport(MOBILE_BREAKPOINT);
   const buttonLabel = formatGlossaryTooltipLabel(language, entry.title);
+  const handlePointerDown = useEffectEvent((event: PointerEvent) => {
+    const target = event.target as Node;
+    const isInsideAnchor = anchorRef.current?.contains(target);
+    const isInsidePopover = popoverRef.current?.contains(target);
 
-  useEffect(() => {
-    if (!open) {
-      return undefined;
+    if (!isInsideAnchor && !isInsidePopover) {
+      setOpen(false);
+    }
+  });
+  const handleTooltipOpen = useEffectEvent((event: Event) => {
+    const detail = (event as CustomEvent<{ id?: string }>).detail;
+
+    if (detail.id !== id) {
+      setOpen(false);
+    }
+  });
+  const handleEscape = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      setOpen(false);
+    }
+  });
+  const updatePosition = useEffectEvent(() => {
+    const anchor = anchorRef.current;
+    const popover = popoverRef.current;
+
+    if (!anchor || !popover) {
+      return;
     }
 
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Node;
-      const isInsideAnchor = anchorRef.current?.contains(target);
-      const isInsidePopover = popoverRef.current?.contains(target);
+    const anchorRect = anchor.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const clampedLeft = Math.min(
+      viewportWidth - VIEWPORT_PADDING - popoverRect.width,
+      Math.max(VIEWPORT_PADDING, anchorRect.right - popoverRect.width),
+    );
+    const spaceBelow = viewportHeight - anchorRect.bottom - TOOLTIP_GAP - VIEWPORT_PADDING;
+    const spaceAbove = anchorRect.top - TOOLTIP_GAP - VIEWPORT_PADDING;
+    const placeAbove = spaceBelow < popoverRect.height && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(96, placeAbove ? spaceAbove : spaceBelow);
+    const desiredTop = placeAbove
+      ? anchorRect.top - TOOLTIP_GAP - Math.min(popoverRect.height, maxHeight)
+      : anchorRect.bottom + TOOLTIP_GAP;
+    const clampedTop = Math.min(
+      viewportHeight - VIEWPORT_PADDING - Math.min(popoverRect.height, maxHeight),
+      Math.max(VIEWPORT_PADDING, desiredTop),
+    );
 
-      if (!isInsideAnchor && !isInsidePopover) {
-        setOpen(false);
-      }
+    setPosition({
+      top: clampedTop,
+      left: clampedLeft,
+      maxHeight,
+      ready: true,
+    });
+  });
+
+  useEffect(() => {
+    if (!open || isMobileViewport) {
+      return undefined;
     }
 
     document.addEventListener('pointerdown', handlePointerDown);
@@ -55,33 +109,19 @@ export function GlossaryTooltip({ compact = false, language, termId }: GlossaryT
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [open]);
+  }, [handlePointerDown, isMobileViewport, open]);
 
   useEffect(() => {
-    function handleTooltipOpen(event: Event) {
-      const detail = (event as CustomEvent<{ id?: string }>).detail;
-
-      if (detail.id !== id) {
-        setOpen(false);
-      }
-    }
-
     document.addEventListener(TOOLTIP_OPEN_EVENT, handleTooltipOpen);
 
     return () => {
       document.removeEventListener(TOOLTIP_OPEN_EVENT, handleTooltipOpen);
     };
-  }, [id]);
+  }, [handleTooltipOpen]);
 
   useEffect(() => {
     if (!open) {
       return undefined;
-    }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setOpen(false);
-      }
     }
 
     document.addEventListener('keydown', handleEscape);
@@ -89,48 +129,12 @@ export function GlossaryTooltip({ compact = false, language, termId }: GlossaryT
     return () => {
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [open]);
+  }, [handleEscape, open]);
 
   useLayoutEffect(() => {
     if (!open || isMobileViewport) {
-      setPosition((current) => ({ ...current, ready: false }));
+      setPosition((current) => (current.ready ? { ...current, ready: false } : current));
       return undefined;
-    }
-
-    function updatePosition() {
-      const anchor = anchorRef.current;
-      const popover = popoverRef.current;
-
-      if (!anchor || !popover) {
-        return;
-      }
-
-      const anchorRect = anchor.getBoundingClientRect();
-      const popoverRect = popover.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const clampedLeft = Math.min(
-        viewportWidth - VIEWPORT_PADDING - popoverRect.width,
-        Math.max(VIEWPORT_PADDING, anchorRect.right - popoverRect.width),
-      );
-      const spaceBelow = viewportHeight - anchorRect.bottom - TOOLTIP_GAP - VIEWPORT_PADDING;
-      const spaceAbove = anchorRect.top - TOOLTIP_GAP - VIEWPORT_PADDING;
-      const placeAbove = spaceBelow < popoverRect.height && spaceAbove > spaceBelow;
-      const maxHeight = Math.max(96, placeAbove ? spaceAbove : spaceBelow);
-      const desiredTop = placeAbove
-        ? anchorRect.top - TOOLTIP_GAP - Math.min(popoverRect.height, maxHeight)
-        : anchorRect.bottom + TOOLTIP_GAP;
-      const clampedTop = Math.min(
-        viewportHeight - VIEWPORT_PADDING - Math.min(popoverRect.height, maxHeight),
-        Math.max(VIEWPORT_PADDING, desiredTop),
-      );
-
-      setPosition({
-        top: clampedTop,
-        left: clampedLeft,
-        maxHeight,
-        ready: true,
-      });
     }
 
     const frameId = window.requestAnimationFrame(updatePosition);
@@ -143,7 +147,7 @@ export function GlossaryTooltip({ compact = false, language, termId }: GlossaryT
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [isMobileViewport, open]);
+  }, [isMobileViewport, open, updatePosition]);
 
   function toggleOpen() {
     const next = !open;
@@ -176,19 +180,16 @@ export function GlossaryTooltip({ compact = false, language, termId }: GlossaryT
       {open
         ? createPortal(
             isMobileViewport ? (
-              <div className={styles.modalOverlay} role="presentation">
-                <div
-                  ref={setPopoverElement}
-                  id={`tooltip-${id}`}
-                  className={styles.modalPanel}
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label={entry.title}
-                >
-                  <strong>{entry.title}</strong>
-                  <span>{entry.description}</span>
-                </div>
-              </div>
+              <Suspense fallback={null}>
+                <GlossaryTooltipDialog
+                  description={entry.description}
+                  dialogId={`tooltip-${id}`}
+                  language={language}
+                  onClose={() => setOpen(false)}
+                  setPopoverElement={setPopoverElement}
+                  title={entry.title}
+                />
+              </Suspense>
             ) : (
               <span
                 ref={setPopoverElement}

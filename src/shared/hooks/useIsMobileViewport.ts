@@ -5,13 +5,24 @@ type LegacyMediaQueryList = MediaQueryList & {
   removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
 };
 
+type ViewportQueryStore = {
+  getSnapshot: () => boolean;
+  subscribe: (listener: () => void) => () => void;
+};
+
+const viewportQueryStores = new Map<number, ViewportQueryStore>();
+
 function getQuery(maxWidth: number): string {
   return `(max-width: ${maxWidth}px)`;
 }
 
-function getSnapshot(maxWidth: number): boolean {
+function getSnapshot(maxWidth: number, mediaQuery?: MediaQueryList | null): boolean {
   if (typeof window === 'undefined') {
     return false;
+  }
+
+  if (mediaQuery) {
+    return mediaQuery.matches;
   }
 
   if (typeof window.matchMedia === 'function') {
@@ -21,39 +32,99 @@ function getSnapshot(maxWidth: number): boolean {
   return window.innerWidth <= maxWidth;
 }
 
-function subscribe(maxWidth: number, onStoreChange: () => void): () => void {
-  if (typeof window === 'undefined') {
-    return () => undefined;
-  }
+function createViewportQueryStore(maxWidth: number): ViewportQueryStore {
+  const listeners = new Set<() => void>();
 
-  const notify = () => onStoreChange();
-  const query = getQuery(maxWidth);
-  const mediaQuery =
-    typeof window.matchMedia === 'function'
-      ? (window.matchMedia(query) as LegacyMediaQueryList)
+  let mediaQuery: LegacyMediaQueryList | null =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? (window.matchMedia(getQuery(maxWidth)) as LegacyMediaQueryList)
       : null;
+  let removeFallbackResizeListener: (() => void) | null = null;
+  let notify = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
 
-  if (mediaQuery?.addEventListener) {
-    mediaQuery.addEventListener('change', notify);
-  } else if (mediaQuery?.addListener) {
-    mediaQuery.addListener(notify);
-  }
-  window.addEventListener('resize', notify);
-
-  return () => {
+  function detach() {
     if (mediaQuery?.removeEventListener) {
       mediaQuery.removeEventListener('change', notify);
     } else if (mediaQuery?.removeListener) {
       mediaQuery.removeListener(notify);
     }
-    window.removeEventListener('resize', notify);
+
+    removeFallbackResizeListener?.();
+    removeFallbackResizeListener = null;
+  }
+
+  function attach() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!mediaQuery && typeof window.matchMedia === 'function') {
+      mediaQuery = window.matchMedia(getQuery(maxWidth)) as LegacyMediaQueryList;
+    }
+
+    if (mediaQuery?.addEventListener) {
+      mediaQuery.addEventListener('change', notify);
+      return;
+    }
+
+    if (mediaQuery?.addListener) {
+      mediaQuery.addListener(notify);
+      return;
+    }
+
+    window.addEventListener('resize', notify);
+    removeFallbackResizeListener = () => window.removeEventListener('resize', notify);
+  }
+
+  return {
+    getSnapshot: () => getSnapshot(maxWidth, mediaQuery),
+    subscribe: (listener) => {
+      if (!listeners.size) {
+        attach();
+      }
+
+      listeners.add(listener);
+
+      return () => {
+        listeners.delete(listener);
+
+        if (!listeners.size) {
+          detach();
+          viewportQueryStores.delete(maxWidth);
+        }
+      };
+    },
   };
 }
 
+function getViewportQueryStore(maxWidth: number): ViewportQueryStore {
+  const existing = viewportQueryStores.get(maxWidth);
+
+  if (existing) {
+    return existing;
+  }
+
+  const nextStore = createViewportQueryStore(maxWidth);
+  viewportQueryStores.set(maxWidth, nextStore);
+
+  return nextStore;
+}
+
 export function useIsMobileViewport(maxWidth = 720): boolean {
-  return useSyncExternalStore(
-    (onStoreChange) => subscribe(maxWidth, onStoreChange),
-    () => getSnapshot(maxWidth),
-    () => false,
-  );
+  const store = getViewportQueryStore(maxWidth);
+
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, () => false);
+}
+
+export function resetViewportQueryStoresForTests(): void {
+  if (typeof window === 'undefined') {
+    viewportQueryStores.clear();
+    return;
+  }
+
+  viewportQueryStores.clear();
 }

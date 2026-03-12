@@ -11,6 +11,7 @@
   padding: 7px;
   border: 1px solid #8d8379;
   background: transparent;
+  contain: layout paint;
   transition:
     background-color 160ms ease,
     outline-color 160ms ease;
@@ -48,4 +49,5 @@
   aspect-ratio: 1;
   border-radius: 999px;
   background: rgba(120, 145, 74, 0.88);
+  contain: paint;
 }

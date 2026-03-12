@@ -14,11 +14,22 @@ type HistoryState = 'current' | 'future' | 'past';
 
 export function HistorySection() {
   const compactLayout = useIsMobileViewport(960);
-  const { canRedo, canUndo, historyCursor, language, onGoToHistoryCursor, onRedo, onUndo, turnLog } = useGameStore(
+  const {
+    canRedo,
+    canUndo,
+    historyCursor,
+    historyHydrationStatus,
+    language,
+    onGoToHistoryCursor,
+    onRedo,
+    onUndo,
+    turnLog,
+  } = useGameStore(
     useShallow((state) => ({
       canRedo: state.future.length > 0,
       canUndo: state.past.length > 0,
       historyCursor: state.historyCursor,
+      historyHydrationStatus: state.historyHydrationStatus,
       language: state.preferences.language,
       onGoToHistoryCursor: state.goToHistoryCursor,
       onRedo: state.redo,
@@ -28,6 +39,12 @@ export function HistorySection() {
   );
   const deferredTurnLog = useDeferredValue(turnLog);
   const historyEntries = deferredTurnLog.map((record, index) => ({ record, index })).reverse();
+  const hydrationNote =
+    historyHydrationStatus === 'hydrating'
+      ? text(language, 'historyHydrating')
+      : historyHydrationStatus === 'recentOnly'
+        ? text(language, 'historyRecentOnly')
+        : null;
 
   const showMatchSetup = !compactLayout;
 
@@ -44,6 +61,7 @@ export function HistorySection() {
           </Button>
         </div>
         <small>{formatHistorySummary(language, deferredTurnLog.length, historyCursor)}</small>
+        {hydrationNote ? <small className={styles.statusNote}>{hydrationNote}</small> : null}
       </div>
       <ol className={styles.list}>
         {historyEntries.map(({ record, index }) => {

@@ -1,5 +1,6 @@
-export const SESSION_STORAGE_KEY = 'white-maybe-black/session/v3';
+export const SESSION_STORAGE_KEY = 'white-maybe-black/session/v4';
 export const LEGACY_SESSION_STORAGE_KEYS = [
+  'white-maybe-black/session/v3',
   'white-maybe-black/session/v2',
   'white-maybe-black/session/v1',
 ] as const;

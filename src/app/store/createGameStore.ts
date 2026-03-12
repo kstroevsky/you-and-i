@@ -42,8 +42,17 @@ import type {
   UndoFrame,
 } from '@/shared/types/session';
 import { uniqueValues } from '@/shared/utils/collections';
+import { createIndexedDbSessionArchive, type SessionArchive } from '@/app/store/sessionArchive';
+import {
+  createCompactSession,
+  createPersistedSessionEnvelope,
+  deserializePersistedSessionEnvelope,
+  LOCAL_HISTORY_WINDOW,
+  serializePersistedSessionEnvelope,
+} from '@/app/store/sessionPersistence';
 
 type AiStatus = 'idle' | 'thinking' | 'error';
+export type HistoryHydrationStatus = 'hydrating' | 'recentOnly' | 'full';
 
 type AiWorkerLike = {
   onerror: ((event: ErrorEvent) => void) | null;
@@ -73,6 +82,7 @@ type GameStoreData = {
   scoreSummary: ScoreSummary | null;
   interaction: InteractionState;
   historyCursor: number;
+  historyHydrationStatus: HistoryHydrationStatus;
   importBuffer: string;
   importError: string | null;
   lastAiDecision: AiSearchResult | null;
@@ -113,6 +123,28 @@ const LEGACY_RULE_DEFAULTS: RuleConfig = {
 };
 const AI_WATCHDOG_BUFFER_MS = 250;
 
+type StoreOptions = {
+  archive?: SessionArchive | null;
+  createAiWorker?: () => AiWorkerLike | null;
+  createSessionId?: () => string;
+  initialSession?: SerializableSession;
+  storage?: Storage;
+};
+
+type SessionSlices = Pick<
+  GameStoreData,
+  'ruleConfig' | 'preferences' | 'matchSettings' | 'gameState' | 'turnLog' | 'past' | 'future'
+>;
+
+type InitialPersistenceState = {
+  historyHydrationStatus: HistoryHydrationStatus;
+  needsPersistenceSync: boolean;
+  revision: number;
+  session: SerializableSession;
+  sessionId: string;
+  startupHydrationMode: 'compact' | 'default' | null;
+};
+
 /** Returns stable rule-config cache key used for store-side derivation memoization. */
 function ruleConfigKey(config: RuleConfig): string {
   return [
@@ -144,6 +176,14 @@ function isComputerTurn(gameState: GameState, matchSettings: MatchSettings): boo
   return isComputerMatch(matchSettings) && gameState.currentPlayer !== matchSettings.humanPlayer;
 }
 
+function createSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** Builds serializable session payload from store slices. */
 function buildSession(
   ruleConfig: RuleConfig,
@@ -167,15 +207,51 @@ function buildSession(
 }
 
 /** Persists session into browser storage when available. */
-function persistSession(session: SerializableSession, storage?: Storage): void {
+function clearLegacySessionKeys(storage?: Storage): void {
   if (!storage) {
     return;
   }
 
-  storage.setItem(SESSION_STORAGE_KEY, serializeSession(session));
-
   for (const legacyKey of LEGACY_SESSION_STORAGE_KEYS) {
     storage.removeItem(legacyKey);
+  }
+}
+
+/** Writes the compact local snapshot and never lets storage failures escape the store. */
+function persistSession(
+  session: SerializableSession,
+  sessionId: string,
+  revision: number,
+  storage?: Storage,
+): boolean {
+  if (!storage) {
+    return true;
+  }
+
+  const serialized = serializePersistedSessionEnvelope(
+    createPersistedSessionEnvelope(
+      'compact',
+      sessionId,
+      revision,
+      createCompactSession(session, LOCAL_HISTORY_WINDOW),
+    ),
+  );
+
+  clearLegacySessionKeys(storage);
+
+  try {
+    storage.setItem(SESSION_STORAGE_KEY, serialized);
+    return true;
+  } catch {
+    storage.removeItem(SESSION_STORAGE_KEY);
+
+    try {
+      storage.setItem(SESSION_STORAGE_KEY, serialized);
+      return true;
+    } catch {
+      storage.removeItem(SESSION_STORAGE_KEY);
+      return false;
+    }
   }
 }
 
@@ -217,43 +293,80 @@ function migrateLegacyRuleDefaults(
 }
 
 /** Loads session from browser storage and drops corrupted payloads. */
-function loadSession(storage?: Storage): SerializableSession | null {
-  if (!storage) {
-    return null;
-  }
-
-  const candidateKeys = [SESSION_STORAGE_KEY, ...LEGACY_SESSION_STORAGE_KEYS];
-
-  for (const storageKey of candidateKeys) {
-    const serialized = storage.getItem(storageKey);
-
-    if (!serialized) {
-      continue;
-    }
-
-    try {
-      const deserialized = deserializeSession(serialized);
-      const { session, migrated } = migrateLegacyRuleDefaults(deserialized);
-
-      if (storageKey !== SESSION_STORAGE_KEY || migrated) {
-        persistSession(session, storage);
-      }
-
-      return session;
-    } catch {
-      storage.removeItem(storageKey);
-    }
-  }
-
-  return null;
-}
-
 /** Returns fresh default session for first launch or reset fallback. */
 function getDefaultSession(): SerializableSession {
   const ruleConfig = withRuleDefaults();
   const present = createInitialState(ruleConfig);
 
   return buildSession(ruleConfig, DEFAULT_PREFERENCES, DEFAULT_MATCH_SETTINGS, present, [], [], []);
+}
+
+/** Resolves the best synchronous boot state before async IndexedDB hydration continues. */
+function getInitialPersistenceState(options: StoreOptions): InitialPersistenceState {
+  const createId = options.createSessionId ?? createSessionId;
+  const archiveAvailable = options.archive !== null && options.archive !== undefined;
+
+  if (options.initialSession) {
+    return {
+      historyHydrationStatus: 'full',
+      needsPersistenceSync: false,
+      revision: 0,
+      session: options.initialSession,
+      sessionId: createId(),
+      startupHydrationMode: null,
+    };
+  }
+
+  if (options.storage) {
+    const candidateKeys = [SESSION_STORAGE_KEY, ...LEGACY_SESSION_STORAGE_KEYS];
+
+    for (const storageKey of candidateKeys) {
+      const serialized = options.storage.getItem(storageKey);
+
+      if (!serialized) {
+        continue;
+      }
+
+      try {
+        if (storageKey === SESSION_STORAGE_KEY) {
+          const envelope = deserializePersistedSessionEnvelope(serialized);
+          const { session, migrated } = migrateLegacyRuleDefaults(envelope.session);
+
+          return {
+            historyHydrationStatus: archiveAvailable ? 'hydrating' : 'recentOnly',
+            needsPersistenceSync: migrated,
+            revision: envelope.revision,
+            session,
+            sessionId: envelope.sessionId,
+            startupHydrationMode: archiveAvailable ? 'compact' : null,
+          };
+        }
+
+        const deserialized = deserializeSession(serialized);
+        const { session } = migrateLegacyRuleDefaults(deserialized);
+
+        return {
+          historyHydrationStatus: 'full',
+          needsPersistenceSync: true,
+          revision: 0,
+          session,
+          sessionId: createId(),
+          startupHydrationMode: null,
+        };
+      } catch {
+        options.storage.removeItem(storageKey);
+      }
+    }
+  }
+
+  return {
+    historyHydrationStatus: archiveAvailable ? 'hydrating' : 'full',
+    needsPersistenceSync: false,
+    revision: 0,
+    session: getDefaultSession(),
+    sessionId: createId(),
+    startupHydrationMode: archiveAvailable ? 'default' : null,
+  };
 }
 
 /** Rehydrates runtime game state and store slices from one serialized session. */
@@ -364,19 +477,20 @@ function getJumpContinuationSelection(gameState: GameState): JumpContinuationSel
   };
 }
 
-type StoreOptions = {
-  createAiWorker?: () => AiWorkerLike | null;
-  initialSession?: SerializableSession;
-  storage?: Storage;
-};
-
 /** Creates zustand store orchestrating UI interaction state and pure domain engine. */
 export function createGameStore(options: StoreOptions = {}) {
   const storage =
     options.storage ??
     (typeof window !== 'undefined' ? window.localStorage : undefined);
-  const initialSession =
-    options.initialSession ?? loadSession(storage) ?? getDefaultSession();
+  const archive =
+    options.archive ??
+    (typeof window !== 'undefined' ? createIndexedDbSessionArchive() : null);
+  const initialPersistence = getInitialPersistenceState({
+    ...options,
+    archive,
+    storage,
+  });
+  const initialSession = initialPersistence.session;
   const initialRuntimeState = createRuntimeState(initialSession);
 
   let boardDerivationCache:
@@ -463,10 +577,21 @@ export function createGameStore(options: StoreOptions = {}) {
       ? { type: 'gameOver' }
       : { type: 'idle' };
 
+  let persistInitialState: (() => void) | null = null;
+  let startArchiveHydration: (() => void) | null = null;
+
   const store = createStore<GameStoreState>((set, get) => {
     let aiWorker: AiWorkerLike | null = null;
     let aiWatchdogId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let nextAiRequestId = 1;
+    let activeSessionId = initialPersistence.sessionId;
+    let activeRevision = initialPersistence.revision;
+    let historyHydrationStatus = initialPersistence.historyHydrationStatus;
+    let startupHydrationMode = initialPersistence.startupHydrationMode;
+    let archiveWriteQueue = Promise.resolve();
+    let archiveWritesEnabled = startupHydrationMode !== 'compact';
+    let hydrationToken = 0;
+    let localPersistenceEnabled = true;
 
     function getTurnSpans(turnLog: TurnRecord[], historyCursor: number): Array<{
       actor: TurnRecord['actor'];
@@ -518,6 +643,93 @@ export function createGameStore(options: StoreOptions = {}) {
       }
 
       return lastSpan.start;
+    }
+
+    function buildSessionFromState(nextState: SessionSlices): SerializableSession {
+      return buildSession(
+        nextState.ruleConfig,
+        nextState.preferences,
+        nextState.matchSettings,
+        nextState.gameState,
+        nextState.turnLog,
+        nextState.past,
+        nextState.future,
+      );
+    }
+
+    function consumeStartupHydrationOnMutation(): HistoryHydrationStatus {
+      if (startupHydrationMode === null) {
+        return historyHydrationStatus;
+      }
+
+      hydrationToken += 1;
+
+      if (startupHydrationMode === 'compact') {
+        historyHydrationStatus = 'recentOnly';
+        archiveWritesEnabled = false;
+      } else {
+        historyHydrationStatus = 'full';
+        archiveWritesEnabled = true;
+      }
+
+      startupHydrationMode = null;
+
+      return historyHydrationStatus;
+    }
+
+    function beginFreshFullSession(): HistoryHydrationStatus {
+      hydrationToken += 1;
+      startupHydrationMode = null;
+      activeSessionId = (options.createSessionId ?? createSessionId)();
+      activeRevision = 0;
+      historyHydrationStatus = 'full';
+      archiveWritesEnabled = true;
+
+      return historyHydrationStatus;
+    }
+
+    function queueArchiveWrite(session: SerializableSession, revision: number): void {
+      if (!archive || !archiveWritesEnabled) {
+        return;
+      }
+
+      const envelope = createPersistedSessionEnvelope('full', activeSessionId, revision, session);
+
+      archiveWriteQueue = archiveWriteQueue
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            await archive.saveLatest(envelope);
+          } catch {
+            if (
+              activeSessionId === envelope.sessionId &&
+              activeRevision === envelope.revision
+            ) {
+              archiveWritesEnabled = false;
+            }
+          }
+        });
+    }
+
+    function persistRuntimeSession(
+      session: SerializableSession,
+      options: {
+        incrementRevision?: boolean;
+        persistArchive?: boolean;
+      } = {},
+    ): void {
+      const nextRevision =
+        options.incrementRevision === false ? activeRevision : activeRevision + 1;
+
+      activeRevision = nextRevision;
+
+      if (localPersistenceEnabled) {
+        localPersistenceEnabled = persistSession(session, activeSessionId, nextRevision, storage);
+      }
+
+      if (options.persistArchive !== false) {
+        queueArchiveWrite(session, nextRevision);
+      }
     }
 
     function clearAiWatchdog(): void {
@@ -703,27 +915,16 @@ export function createGameStore(options: StoreOptions = {}) {
     }
 
     /** Persists current core session slices after state transitions. */
-    function persistCurrentState(nextState: Pick<
-      GameStoreData,
-      'ruleConfig' | 'preferences' | 'matchSettings' | 'gameState' | 'turnLog' | 'past' | 'future'
-    >): void {
-      persistSession(
-        buildSession(
-          nextState.ruleConfig,
-          nextState.preferences,
-          nextState.matchSettings,
-          nextState.gameState,
-          nextState.turnLog,
-          nextState.past,
-          nextState.future,
-        ),
-        storage,
-      );
+    function persistCurrentState(nextState: SessionSlices): void {
+      persistRuntimeSession(buildSessionFromState(nextState), {
+        persistArchive: archiveWritesEnabled,
+      });
     }
 
     /** Commits one validated turn action through the domain reducer and updates app-level flow state. */
     function commitAction(action: TurnAction, aiDecision: AiSearchResult | null = null): void {
       const state = get();
+      const nextHistoryHydrationStatus = consumeStartupHydrationOnMutation();
       const nextGameState = applyAction(state.gameState, action, state.ruleConfig);
       const nextTurnLog = nextGameState.history;
       const nextPast = [...state.past, createUndoFrame(state.gameState)];
@@ -759,6 +960,7 @@ export function createGameStore(options: StoreOptions = {}) {
 
       set({
         ...nextData,
+        historyHydrationStatus: nextHistoryHydrationStatus,
         ...(jumpContinuation
           ? createSelectionState(
               jumpContinuation.source,
@@ -798,8 +1000,28 @@ export function createGameStore(options: StoreOptions = {}) {
     }
 
     /** Replaces entire store session (used by import and initialization paths). */
-    function applySession(session: SerializableSession): void {
+    function applySession(
+      session: SerializableSession,
+      options: {
+        historyHydrationStatus?: HistoryHydrationStatus;
+        persist?: boolean;
+        revision?: number;
+        sessionId?: string;
+      } = {},
+    ): void {
       disposeAiWorker();
+      startupHydrationMode = null;
+
+      if (options.sessionId) {
+        activeSessionId = options.sessionId;
+      }
+      if (typeof options.revision === 'number') {
+        activeRevision = options.revision;
+      }
+
+      archiveWritesEnabled = true;
+      historyHydrationStatus = options.historyHydrationStatus ?? 'full';
+
       const runtimeState = createRuntimeState(session);
       const nextBoardDerivation = getBoardDerivation(runtimeState.gameState, runtimeState.ruleConfig);
       const jumpContinuation = getJumpContinuationSelection(runtimeState.gameState);
@@ -826,12 +1048,17 @@ export function createGameStore(options: StoreOptions = {}) {
             )
           : createIdleSelection(runtimeState.gameState)),
         ...resetAiState(),
+        historyHydrationStatus,
         lastAiDecision: null,
         importBuffer: '',
         importError: null,
         exportBuffer: current.exportBuffer,
       }));
-      persistSession(session, storage);
+
+      if (options.persist !== false) {
+        persistRuntimeSession(session);
+      }
+
       syncComputerTurn();
     }
 
@@ -908,6 +1135,7 @@ export function createGameStore(options: StoreOptions = {}) {
     function applyHistoryStep(direction: 'backward' | 'forward'): boolean {
       disposeAiWorker();
       const state = get();
+      const nextHistoryHydrationStatus = consumeStartupHydrationOnMutation();
       const nextData = getHistoryStepData(state, direction);
 
       if (!nextData) {
@@ -916,6 +1144,7 @@ export function createGameStore(options: StoreOptions = {}) {
 
       set({
         ...nextData,
+        historyHydrationStatus: nextHistoryHydrationStatus,
         ...createIdleSelection(nextData.gameState),
         ...resetAiState(),
       });
@@ -925,11 +1154,97 @@ export function createGameStore(options: StoreOptions = {}) {
       return true;
     }
 
+    function getSessionSlices(state: GameStoreState): SessionSlices {
+      return {
+        ruleConfig: state.ruleConfig,
+        preferences: state.preferences,
+        matchSettings: state.matchSettings,
+        gameState: state.gameState,
+        turnLog: state.turnLog,
+        past: state.past,
+        future: state.future,
+      };
+    }
+
+    persistInitialState = () => {
+      if (!initialPersistence.needsPersistenceSync) {
+        return;
+      }
+
+      persistRuntimeSession(buildSessionFromState(getSessionSlices(get())), {
+        incrementRevision: false,
+        persistArchive: archiveWritesEnabled,
+      });
+    };
+
+    startArchiveHydration = () => {
+      if (!archive || startupHydrationMode === null) {
+        return;
+      }
+
+      const token = ++hydrationToken;
+      const expectedSessionId = activeSessionId;
+      const expectedRevision = activeRevision;
+
+      void archive.loadLatest()
+        .then((envelope) => {
+          if (token !== hydrationToken || startupHydrationMode === null) {
+            return;
+          }
+
+          if (!envelope) {
+            historyHydrationStatus = startupHydrationMode === 'compact' ? 'recentOnly' : 'full';
+            archiveWritesEnabled = startupHydrationMode !== 'compact';
+            startupHydrationMode = null;
+            set({ historyHydrationStatus });
+            return;
+          }
+
+          if (
+            startupHydrationMode === 'compact' &&
+            (envelope.sessionId !== expectedSessionId || envelope.revision !== expectedRevision)
+          ) {
+            historyHydrationStatus = 'recentOnly';
+            archiveWritesEnabled = false;
+            startupHydrationMode = null;
+            set({ historyHydrationStatus });
+            return;
+          }
+
+          applySession(envelope.session, {
+            historyHydrationStatus: 'full',
+            persist: false,
+            revision: envelope.revision,
+            sessionId: envelope.sessionId,
+          });
+
+          if (localPersistenceEnabled) {
+            localPersistenceEnabled = persistSession(
+              envelope.session,
+              envelope.sessionId,
+              envelope.revision,
+              storage,
+            );
+          }
+        })
+        .catch(() => {
+          if (token !== hydrationToken || startupHydrationMode === null) {
+            return;
+          }
+
+          historyHydrationStatus = startupHydrationMode === 'compact' ? 'recentOnly' : 'full';
+          archiveWritesEnabled = startupHydrationMode !== 'compact';
+          startupHydrationMode = null;
+          set({ historyHydrationStatus });
+        });
+    };
+
     return {
       ...initialRuntimeState,
       ...initialBoardDerivation,
       aiError: null,
       aiStatus: 'idle',
+      historyHydrationStatus: initialPersistence.historyHydrationStatus,
       selectedCell: initialJumpContinuation?.source ?? null,
       selectedActionType: initialJumpContinuation ? 'jumpSequence' : null,
       selectedTargetMap: initialJumpContinuation
@@ -1073,7 +1388,10 @@ export function createGameStore(options: StoreOptions = {}) {
 
         try {
           const session = deserializeSession(state.importBuffer);
-          applySession(session);
+          const nextHistoryHydrationStatus = beginFreshFullSession();
+          applySession(session, {
+            historyHydrationStatus: nextHistoryHydrationStatus,
+          });
         } catch {
           set({
             importError: 'importFailed',
@@ -1200,6 +1518,7 @@ export function createGameStore(options: StoreOptions = {}) {
       },
       setPreference: (partial) => {
         const state = get();
+        const nextHistoryHydrationStatus = consumeStartupHydrationOnMutation();
         const preferences = {
           ...state.preferences,
           ...partial,
@@ -1215,6 +1534,7 @@ export function createGameStore(options: StoreOptions = {}) {
         };
 
         set({
+          historyHydrationStatus: nextHistoryHydrationStatus,
           preferences,
           interaction:
             !preferences.passDeviceOverlayEnabled && state.interaction.type === 'passingDevice'
@@ -1226,6 +1546,7 @@ export function createGameStore(options: StoreOptions = {}) {
       setRuleConfig: (partial) => {
         disposeAiWorker();
         const state = get();
+        const nextHistoryHydrationStatus = consumeStartupHydrationOnMutation();
         const ruleConfig = withRuleDefaults({
           ...state.ruleConfig,
           ...partial,
@@ -1261,6 +1582,7 @@ export function createGameStore(options: StoreOptions = {}) {
 
         set({
           ...nextData,
+          historyHydrationStatus: nextHistoryHydrationStatus,
           ...createIdleSelection(nextGameState),
           ...resetAiState(),
         });
@@ -1270,6 +1592,7 @@ export function createGameStore(options: StoreOptions = {}) {
       startNewGame: (matchSettings = get().setupMatchSettings) => {
         disposeAiWorker();
         const state = get();
+        const nextHistoryHydrationStatus = beginFreshFullSession();
         const nextRuleConfig = getRuleConfigForNewMatch(state.ruleConfig, matchSettings);
         const nextGameState = createInitialState(nextRuleConfig);
         const nextBoardDerivation = getBoardDerivation(nextGameState, nextRuleConfig);
@@ -1287,6 +1610,7 @@ export function createGameStore(options: StoreOptions = {}) {
 
         set({
           ...nextData,
+          historyHydrationStatus: nextHistoryHydrationStatus,
           ...createIdleSelection(nextGameState),
           ...resetAiState(),
           importBuffer: '',
@@ -1324,6 +1648,9 @@ export function createGameStore(options: StoreOptions = {}) {
   });
 
   queueMicrotask(() => {
+    persistInitialState?.();
+    startArchiveHydration?.();
+
     const state = store.getState();
 
     if (isComputerTurn(state.gameState, state.matchSettings)) {

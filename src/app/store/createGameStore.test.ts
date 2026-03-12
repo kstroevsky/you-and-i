@@ -2,6 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AiSearchResult, AiWorkerRequest, AiWorkerResponse } from '@/ai';
 import { createGameStore } from '@/app/store/createGameStore';
+import type { SessionArchive } from '@/app/store/sessionArchive';
+import {
+  createCompactSession,
+  createPersistedSessionEnvelope,
+  deserializePersistedSessionEnvelope,
+  serializePersistedSessionEnvelope,
+} from '@/app/store/sessionPersistence';
 import {
   applyAction,
   createInitialState,
@@ -10,7 +17,7 @@ import {
   serializeSession,
 } from '@/domain';
 import type { MatchSettings } from '@/shared/types/session';
-import { SESSION_STORAGE_KEY } from '@/shared/constants/storage';
+import { LEGACY_SESSION_STORAGE_KEYS, SESSION_STORAGE_KEY } from '@/shared/constants/storage';
 import {
   boardWithPieces,
   checker,
@@ -21,7 +28,14 @@ import {
   withConfig,
 } from '@/test/factories';
 
-function createMemoryStorage(initialEntries: Record<string, string> = {}): Storage {
+type ArchiveRecord = Awaited<ReturnType<SessionArchive['loadLatest']>>;
+
+function createMemoryStorage(
+  initialEntries: Record<string, string> = {},
+  options: {
+    onSetItem?: (key: string, value: string) => void;
+  } = {},
+): Storage {
   const store = new Map(Object.entries(initialEntries));
 
   return {
@@ -35,9 +49,49 @@ function createMemoryStorage(initialEntries: Record<string, string> = {}): Stora
       store.delete(key);
     },
     setItem: (key, value) => {
+      options.onSetItem?.(key, value);
       store.set(key, value);
     },
   };
+}
+
+function createQuotaExceededError(): Error {
+  try {
+    return new DOMException(
+      "Failed to execute 'setItem' on 'Storage': Setting the value exceeded the quota.",
+      'QuotaExceededError',
+    );
+  } catch {
+    const error = new Error('Quota exceeded.');
+    error.name = 'QuotaExceededError';
+    return error;
+  }
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
+class FakeArchive implements SessionArchive {
+  constructor(
+    private readonly loadImpl: () => Promise<ArchiveRecord>,
+    private readonly saveImpl: (envelope: Parameters<SessionArchive['saveLatest']>[0]) => Promise<void> = async () => undefined,
+  ) {}
+
+  loadLatest() {
+    return this.loadImpl();
+  }
+
+  saveLatest(envelope: Parameters<SessionArchive['saveLatest']>[0]) {
+    return this.saveImpl(envelope);
+  }
 }
 
 class FakeAiWorker {
@@ -104,6 +158,40 @@ function createAiResult(overrides: Partial<AiSearchResult> = {}): AiSearchResult
   };
 }
 
+function createHistorySession(turnCount: number, historyCursor = turnCount) {
+  const config = withConfig();
+  const states = [createInitialState(config)];
+
+  for (let index = 0; index < turnCount; index += 1) {
+    const previous = states.at(-1);
+
+    if (!previous) {
+      break;
+    }
+
+    const action = getLegalActions(previous, config)[0];
+
+    if (!action) {
+      break;
+    }
+
+    states.push(applyAction(previous, action, config));
+  }
+
+  const liveState = states.at(-1) ?? createInitialState(config);
+  const presentState = states[historyCursor] ?? liveState;
+
+  return {
+    session: createSession(liveState, {
+      future: states.slice(historyCursor + 1).map(undoFrame),
+      past: states.slice(0, historyCursor).map(undoFrame),
+      present: undoFrame(presentState),
+      turnLog: liveState.history,
+    }),
+    states,
+  };
+}
+
 describe('createGameStore', () => {
   beforeEach(() => {
     resetFactoryIds();
@@ -143,7 +231,7 @@ describe('createGameStore', () => {
     });
   });
 
-  it('migrates untouched legacy persisted defaults to updated OFF/OFF/ON defaults', () => {
+  it('migrates untouched legacy persisted defaults to updated OFF/OFF/ON defaults', async () => {
     const legacySession = createSession(createInitialState(), {
       ruleConfig: {
         allowNonAdjacentFriendlyStackTransfer: true,
@@ -152,18 +240,22 @@ describe('createGameStore', () => {
       },
     });
     const storage = createMemoryStorage({
-      [SESSION_STORAGE_KEY]: serializeSession(legacySession),
+      [LEGACY_SESSION_STORAGE_KEYS[0]]: serializeSession(legacySession),
     });
     const store = createGameStore({ storage });
+
+    await Promise.resolve();
+
     const persisted = storage.getItem(SESSION_STORAGE_KEY);
+    const envelope = persisted ? deserializePersistedSessionEnvelope(String(persisted)) : null;
 
     expect(store.getState().ruleConfig).toEqual({
       allowNonAdjacentFriendlyStackTransfer: false,
       drawRule: 'none',
       scoringMode: 'basic',
     });
-    expect(persisted).not.toBeNull();
-    expect(deserializeSession(String(persisted)).ruleConfig).toEqual({
+    expect(envelope).not.toBeNull();
+    expect(envelope?.session.ruleConfig).toEqual({
       allowNonAdjacentFriendlyStackTransfer: false,
       drawRule: 'none',
       scoringMode: 'basic',
@@ -184,7 +276,7 @@ describe('createGameStore', () => {
       past: [undoFrame(state0)],
     });
     const storage = createMemoryStorage({
-      [SESSION_STORAGE_KEY]: serializeSession(legacySession),
+      [LEGACY_SESSION_STORAGE_KEYS[0]]: serializeSession(legacySession),
     });
     const store = createGameStore({ storage });
 
@@ -226,6 +318,133 @@ describe('createGameStore', () => {
     store.getState().refreshExportBuffer();
 
     expect(store.getState().exportBuffer).not.toBe(initialExport);
+  });
+
+  it('keeps the computer turn flow alive when local storage quota is exceeded on a new game', () => {
+    const worker = new FakeAiWorker();
+    const storage = createMemoryStorage({}, {
+      onSetItem: () => {
+        throw createQuotaExceededError();
+      },
+    });
+    const store = createGameStore({
+      createAiWorker: () => worker,
+      storage,
+    });
+
+    expect(() =>
+      store.getState().startNewGame({
+        opponentMode: 'computer',
+        humanPlayer: 'black',
+        aiDifficulty: 'easy',
+      }),
+    ).not.toThrow();
+    expect(store.getState().aiStatus).toBe('thinking');
+    expect(worker.requests).toHaveLength(1);
+  });
+
+  it('still schedules the computer reply when a committed move cannot be written to local storage', () => {
+    const worker = new FakeAiWorker();
+    const storage = createMemoryStorage({}, {
+      onSetItem: () => {
+        throw createQuotaExceededError();
+      },
+    });
+    const store = createGameStore({
+      createAiWorker: () => worker,
+      storage,
+    });
+
+    store.getState().startNewGame({
+      opponentMode: 'computer',
+      humanPlayer: 'white',
+      aiDifficulty: 'easy',
+    });
+    store.getState().selectCell('A1');
+    store.getState().chooseActionType('climbOne');
+
+    expect(() => store.getState().selectCell('B2')).not.toThrow();
+    expect(store.getState().aiStatus).toBe('thinking');
+    expect(worker.requests).toHaveLength(1);
+  });
+
+  it('hydrates full archived history over a compact local session', async () => {
+    const { session } = createHistorySession(18);
+    const sessionId = 'archive-hydrate';
+    const revision = 4;
+    const compact = createCompactSession(session);
+    const archive = new FakeArchive(async () =>
+      createPersistedSessionEnvelope('full', sessionId, revision, session),
+    );
+    const storage = createMemoryStorage({
+      [SESSION_STORAGE_KEY]: serializePersistedSessionEnvelope(
+        createPersistedSessionEnvelope('compact', sessionId, revision, compact),
+      ),
+    });
+    const store = createGameStore({ archive, storage });
+
+    expect(store.getState().historyHydrationStatus).toBe('hydrating');
+    expect(store.getState().turnLog).toHaveLength(compact.turnLog.length);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(store.getState().historyHydrationStatus).toBe('full');
+    expect(store.getState().turnLog).toHaveLength(session.turnLog.length);
+    expect(store.getState().historyCursor).toBe(session.present.historyCursor);
+  });
+
+  it('ignores stale archive hydration after the compact session changes locally', async () => {
+    const { session } = createHistorySession(18);
+    const sessionId = 'archive-stale';
+    const revision = 7;
+    const compact = createCompactSession(session);
+    const loadDeferred = createDeferred<ArchiveRecord>();
+    const archive = new FakeArchive(() => loadDeferred.promise);
+    const storage = createMemoryStorage({
+      [SESSION_STORAGE_KEY]: serializePersistedSessionEnvelope(
+        createPersistedSessionEnvelope('compact', sessionId, revision, compact),
+      ),
+    });
+    const store = createGameStore({ archive, storage });
+
+    store.getState().setPreference({ language: 'english' });
+
+    expect(store.getState().historyHydrationStatus).toBe('recentOnly');
+
+    loadDeferred.resolve(createPersistedSessionEnvelope('full', sessionId, revision, session));
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(store.getState().preferences.language).toBe('english');
+    expect(store.getState().historyHydrationStatus).toBe('recentOnly');
+    expect(store.getState().turnLog).toHaveLength(compact.turnLog.length);
+  });
+
+  it('falls back to recent-only history when archive hydration fails', async () => {
+    const { session } = createHistorySession(18);
+    const sessionId = 'archive-failure';
+    const revision = 9;
+    const compact = createCompactSession(session);
+    const archive = new FakeArchive(async () => {
+      throw new Error('IndexedDB blocked');
+    });
+    const storage = createMemoryStorage({
+      [SESSION_STORAGE_KEY]: serializePersistedSessionEnvelope(
+        createPersistedSessionEnvelope('compact', sessionId, revision, compact),
+      ),
+    });
+    const store = createGameStore({ archive, storage });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => {
+      globalThis.setTimeout(resolve, 0);
+    });
+
+    expect(store.getState().historyHydrationStatus).toBe('recentOnly');
+    expect(store.getState().turnLog).toHaveLength(compact.turnLog.length);
   });
 
   it('restores undo and redo from shared turn-log frames', () => {

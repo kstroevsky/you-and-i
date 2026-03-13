@@ -73,7 +73,7 @@ describe('App', () => {
     renderApp();
 
     await user.click(await screen.findByRole('button', { name: 'Клетка A1' }));
-    await user.click(screen.getByRole('button', { name: 'Восхождение' }));
+    await user.click(await screen.findByRole('button', { name: 'Восхождение' }));
     await user.click(screen.getByRole('button', { name: 'Клетка B2' }));
     await user.click(await screen.findByRole('button', { name: 'Продолжить' }));
     await user.click(screen.getByRole('tab', { name: 'Инструкция' }));

@@ -1,14 +1,11 @@
 import { getCell } from '@/domain/model/board';
 import { FRONT_HOME_ROW, HOME_ROWS } from '@/domain/model/constants';
 import { allCoords, parseCoord } from '@/domain/model/coordinates';
-import type { EngineState, Player } from '@/domain/model/types';
+import type { EngineState } from '@/domain/model/types';
 
 export const AI_MODEL_PLANE_COUNT = 16;
 
-function getOpponent(player: Player): Player {
-  return player === 'white' ? 'black' : 'white';
-}
-
+/** Writes one feature activation into the flattened plane-major tensor layout. */
 function setPlaneValue(
   buffer: Float32Array,
   plane: number,
@@ -18,10 +15,15 @@ function setPlaneValue(
   buffer[plane * 36 + coordIndex] = value;
 }
 
+/**
+ * Encodes the engine state into the fixed feature planes expected by the ONNX model.
+ *
+ * The representation is perspective-aligned: "own" and "opponent" planes are
+ * relative to the side to move, which lets one model serve both players.
+ */
 export function encodeStateForModel(state: EngineState): Float32Array {
   const buffer = new Float32Array(AI_MODEL_PLANE_COUNT * 36);
   const own = state.currentPlayer;
-  const opponent = getOpponent(own);
   const coords = allCoords();
 
   for (let index = 0; index < coords.length; index += 1) {
@@ -67,9 +69,6 @@ export function encodeStateForModel(state: EngineState): Float32Array {
       }
     }
 
-    if (!cell.checkers.length && opponent === own) {
-      setPlaneValue(buffer, 12, index);
-    }
   }
 
   return buffer;

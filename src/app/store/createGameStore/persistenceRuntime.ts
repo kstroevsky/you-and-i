@@ -31,7 +31,13 @@ type StartArchiveHydrationOptions = {
   onHydrationFallback: (status: HistoryHydrationStatus) => void;
 };
 
-/** Owns mutable session persistence state for one store instance. */
+/**
+ * Owns the mutable persistence lifecycle for one live store instance.
+ *
+ * The persisted session itself stays immutable; this runtime tracks operational
+ * metadata around it: active session id, revision, hydration race tokens, and
+ * whether compact/archive writes are still available.
+ */
 export function createPersistenceRuntime({
   archive,
   createSessionId: createStoreSessionId,
@@ -47,6 +53,13 @@ export function createPersistenceRuntime({
   let hydrationToken = 0;
   let localPersistenceEnabled = true;
 
+  /**
+   * Collapses the provisional boot mode into a stable visible hydration status.
+   *
+   * Any user mutation cancels the "maybe we will hydrate something better soon"
+   * startup state, because from that point forward the live store becomes the
+   * source of truth and stale archive results must not overwrite it.
+   */
   function consumeStartupHydrationOnMutation(): HistoryHydrationStatus {
     if (startupHydrationMode === null) {
       return historyHydrationStatus;
@@ -67,6 +80,12 @@ export function createPersistenceRuntime({
     return historyHydrationStatus;
   }
 
+  /**
+   * Starts a brand-new persistence lineage for imports and new matches.
+   *
+   * This resets the revision counter and session id so old archive payloads cannot
+   * accidentally attach themselves to a logically new session.
+   */
   function beginFreshFullSession(): HistoryHydrationStatus {
     hydrationToken += 1;
     startupHydrationMode = null;
@@ -78,6 +97,12 @@ export function createPersistenceRuntime({
     return historyHydrationStatus;
   }
 
+  /**
+   * Serializes full-history archive writes so IndexedDB persistence stays ordered.
+   *
+   * The queue is important because multiple rapid store mutations can happen before
+   * the browser finishes the previous asynchronous archive write.
+   */
   function queueArchiveWrite(session: SerializableSession, revision: number): void {
     if (!archive || !archiveWritesEnabled) {
       return;
@@ -101,6 +126,12 @@ export function createPersistenceRuntime({
       });
   }
 
+  /**
+   * Persists the current canonical session to the available storage tiers.
+   *
+   * Compact local persistence is attempted first for fast future boots; full
+   * archive persistence is then queued unless the current runtime policy disables it.
+   */
   function persistRuntimeSession(
     session: SerializableSession,
     options: PersistRuntimeOptions = {},
@@ -124,6 +155,12 @@ export function createPersistenceRuntime({
     }
   }
 
+  /**
+   * Replaces runtime metadata when an external session payload becomes authoritative.
+   *
+   * This is used by import/hydration paths that already know the correct session id,
+   * revision, and visible hydration status.
+   */
   function updateSessionMeta(options: {
     historyHydrationStatus?: HistoryHydrationStatus;
     revision?: number;
@@ -145,6 +182,7 @@ export function createPersistenceRuntime({
     return historyHydrationStatus;
   }
 
+  /** Persists boot-time migrations/default rewrites without creating a fake new revision. */
   function persistInitialState(buildSession: () => SerializableSession): void {
     if (!initialPersistence.needsPersistenceSync) {
       return;
@@ -156,6 +194,12 @@ export function createPersistenceRuntime({
     });
   }
 
+  /**
+   * Attempts to replace compact/default boot data with the full archived session.
+   *
+   * Hydration is guarded by a token plus session identity checks so stale archive
+   * results cannot overwrite newer local mutations or a newly started session.
+   */
   function startArchiveHydration({
     applySession,
     onHydrationFallback,

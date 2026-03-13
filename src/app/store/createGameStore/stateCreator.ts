@@ -31,7 +31,13 @@ type CreateGameStoreStateRuntimeOptions = {
   storage?: Storage;
 };
 
-/** Builds the zustand state creator plus post-create boot hooks for one store instance. */
+/**
+ * Builds the state creator and deferred boot hooks for one store instance.
+ *
+ * This file exists to keep the "assembly" step separate from the pure transition
+ * helpers: one place wires persistence, AI control, derived selectors, and the
+ * initial session payload into a coherent runtime.
+ */
 export function createGameStoreStateRuntime({
   archive,
   initialPersistence,
@@ -53,6 +59,12 @@ export function createGameStoreStateRuntime({
   let persistInitialState: (() => void) | null = null;
   let startArchiveHydration: (() => void) | null = null;
 
+  /**
+   * Instantiates the concrete store runtime around one `set/get` pair.
+   *
+   * The resulting state object is the meeting point of three subsystems:
+   * persistent session truth, transient UI interaction state, and asynchronous AI.
+   */
   function stateCreator(set: StoreSetter, get: () => GameStoreState): GameStoreState {
     const persistenceRuntime = createPersistenceRuntime({
       archive: archive ?? null,
@@ -142,6 +154,12 @@ export function createGameStoreStateRuntime({
     };
   }
 
+  /**
+   * Runs boot-time side effects after Zustand has produced the store object.
+   *
+   * Deferring these effects keeps store construction synchronous while still
+   * allowing migration sync, archive hydration, and immediate AI turns to start.
+   */
   function runPostCreate(store: StoreApi<GameStoreState>): void {
     queueMicrotask(() => {
       persistInitialState?.();

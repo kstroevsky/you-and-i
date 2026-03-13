@@ -68,10 +68,12 @@ export type ActionParticipationProfile = {
   sourceRegion: SourceRegion;
 };
 
+/** Participation is scored symmetrically, so opponent lookup is shared. */
 function getOpponent(player: Player): Player {
   return player === 'white' ? 'black' : 'white';
 }
 
+/** Seeds the rolling recent-move summary for one side. */
 function createPlayerParticipationState(): PlayerParticipationState {
   return {
     activeCheckerIds: [],
@@ -87,6 +89,7 @@ function createPlayerParticipationState(): PlayerParticipationState {
   };
 }
 
+/** Creates the bounded recent-history participation state carried through search. */
 function createParticipationState(window: number): ParticipationState {
   return {
     players: {
@@ -97,6 +100,7 @@ function createParticipationState(window: number): ParticipationState {
   };
 }
 
+/** Normalizes action variants onto a common source coordinate for reuse tracking. */
 function getActionSource(action: TurnAction): Coord | null {
   switch (action.type) {
     case 'manualUnfreeze':
@@ -108,6 +112,12 @@ function getActionSource(action: TurnAction): Coord | null {
   }
 }
 
+/**
+ * Converts an action into stable checker identities.
+ *
+ * Checker ids let the AI distinguish "the same family moved again" from "another
+ * source cell moved material that only looks similar geometrically."
+ */
 function getMovedCheckerIds(board: Board, action: TurnAction): string[] {
   switch (action.type) {
     case 'manualUnfreeze': {
@@ -135,6 +145,7 @@ function getMovedCheckerIds(board: Board, action: TurnAction): string[] {
   }
 }
 
+/** Coarsens board files into broad spatial bands for region-diversity heuristics. */
 function getFileBand(coord: Coord): FileBand {
   const { column } = parseCoord(coord);
 
@@ -149,6 +160,7 @@ function getFileBand(coord: Coord): FileBand {
   return 'center';
 }
 
+/** Measures region from the moving player's perspective rather than absolute board orientation. */
 function getRankBand(coord: Coord, player: Player): RankBand {
   const { row } = parseCoord(coord);
   const relativeRow = player === 'white' ? row : 7 - row;
@@ -164,6 +176,7 @@ function getRankBand(coord: Coord, player: Player): RankBand {
   return 'front';
 }
 
+/** Collapses a source coordinate into a small region vocabulary usable in diagnostics and penalties. */
 function getSourceRegion(coord: Coord | null, player: Player): SourceRegion {
   if (!coord) {
     return 'none';
@@ -172,6 +185,12 @@ function getSourceRegion(coord: Coord | null, player: Player): SourceRegion {
   return `${getFileBand(coord)}-${getRankBand(coord, player)}`;
 }
 
+/**
+ * Builds the identity of the moved material, not merely the source square.
+ *
+ * This matters because stack splits and transfers can make "same family" more
+ * informative than "same coordinate" when judging move variety.
+ */
 function buildSourceFamily(
   movedCheckerIds: string[],
   action: TurnAction,
@@ -185,6 +204,7 @@ function buildSourceFamily(
   return `${action.type}:${source ?? 'none'}:${region}`;
 }
 
+/** Extracts one immutable movement event for the rolling participation window. */
 function createParticipationEntry(
   beforeState: Pick<StateSnapshot | EngineState, 'board'>,
   action: TurnAction,
@@ -203,6 +223,12 @@ function createParticipationEntry(
   };
 }
 
+/**
+ * Rebuilds all derived counters from the bounded recent-event list.
+ *
+ * Recomputing from a short window keeps the logic easy to reason about and avoids
+ * incremental-counter drift bugs.
+ */
 function rebuildPlayerParticipationState(
   recent: ParticipationEntry[],
 ): PlayerParticipationState {
@@ -263,6 +289,7 @@ function rebuildPlayerParticipationState(
   };
 }
 
+/** Appends one participation event and returns the next immutable participation state. */
 function withPlayerEntry(
   state: ParticipationState,
   actor: Player,
@@ -279,6 +306,7 @@ function withPlayerEntry(
   };
 }
 
+/** Measures how broadly the player's currently active material is spread across files. */
 function getFrontierWidth(state: EngineState, player: Player): number {
   const files = new Set<string>();
 
@@ -291,12 +319,14 @@ function getFrontierWidth(state: EngineState, player: Player): number {
   return files.size;
 }
 
+/** Identifies back-rank reserve territory from the player's perspective. */
 function isReserveCoord(coord: Coord, player: Player): boolean {
   const { row } = parseCoord(coord);
 
   return player === 'white' ? row <= 2 : row >= 5;
 }
 
+/** Counts owned reserve material that has not participated in the recent window. */
 function getIdleReserveMass(state: EngineState, player: Player, activeCheckerIds: Set<string>): number {
   let idleReserveMass = 0;
 
@@ -315,10 +345,12 @@ function getIdleReserveMass(state: EngineState, player: Player, activeCheckerIds
   return idleReserveMass;
 }
 
+/** Turns repeated hotspot usage into a scalar concentration penalty. */
 function getConcentration(counts: Record<string, number>): number {
   return Object.values(counts).reduce((sum, count) => sum + Math.max(0, count - 1), 0);
 }
 
+/** Variety matters more in early transport play than in late forced conversion races. */
 function getPhaseScale(state: EngineState): number {
   switch (analyzePosition(state).phase) {
     case 'opening':
@@ -330,6 +362,7 @@ function getPhaseScale(state: EngineState): number {
   }
 }
 
+/** Materializes the interpretable participation features used by evaluation and ordering. */
 function getParticipationProfile(
   state: EngineState,
   player: Player,
@@ -349,6 +382,12 @@ function getParticipationProfile(
   };
 }
 
+/**
+ * Converts recent-move participation into a scalar quality score.
+ *
+ * The objective is not randomness. It is to reward broader, more legible use of
+ * available material when the position does not demand narrow tactical reuse.
+ */
 function getPlayerParticipationScore(
   state: EngineState,
   player: Player,
@@ -370,6 +409,7 @@ function getPlayerParticipationScore(
   );
 }
 
+/** Reconstructs recent-move participation context from committed history. */
 export function buildParticipationState(
   state: EngineState,
   window: number,
@@ -389,6 +429,7 @@ export function buildParticipationState(
   }, participationState);
 }
 
+/** Adds a side-relative participation term to the static evaluation. */
 export function getParticipationScore(
   state: EngineState,
   perspectivePlayer: Player,
@@ -417,6 +458,12 @@ export function getParticipationScore(
   );
 }
 
+/**
+ * Scores how one candidate move changes participation quality for the acting side.
+ *
+ * This profile is used inside move ordering so the AI can prefer broader material
+ * engagement when tactical urgency does not override that preference.
+ */
 export function getActionParticipationProfile(
   state: EngineState,
   action: TurnAction,

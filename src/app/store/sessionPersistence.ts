@@ -15,6 +15,7 @@ export type PersistedSessionEnvelope<K extends PersistedSessionKind = PersistedS
   session: SerializableSession;
 };
 
+/** Copies an undo frame so persisted snapshots never retain live mutable references. */
 function cloneUndoFrame(frame: UndoFrame): UndoFrame {
   return {
     snapshot: frame.snapshot,
@@ -23,6 +24,7 @@ function cloneUndoFrame(frame: UndoFrame): UndoFrame {
   };
 }
 
+/** Deep-copies a serializable session for compaction, migration, and archive writes. */
 export function cloneSession(session: SerializableSession): SerializableSession {
   return {
     ...session,
@@ -33,6 +35,7 @@ export function cloneSession(session: SerializableSession): SerializableSession 
   };
 }
 
+/** Re-expresses a frame cursor relative to a compact history window. */
 function rebaseUndoFrame(frame: UndoFrame, windowStart: number): UndoFrame {
   return {
     ...cloneUndoFrame(frame),
@@ -74,6 +77,7 @@ export function createCompactSession(
   };
 }
 
+/** Wraps a serializable session in app-level storage metadata such as revision and storage kind. */
 export function createPersistedSessionEnvelope<K extends PersistedSessionKind>(
   kind: K,
   sessionId: string,
@@ -89,13 +93,19 @@ export function createPersistedSessionEnvelope<K extends PersistedSessionKind>(
   };
 }
 
+/** Serializes the app-level persistence envelope around the domain session payload. */
 export function serializePersistedSessionEnvelope(
   envelope: PersistedSessionEnvelope,
 ): string {
   return JSON.stringify(envelope);
 }
 
-/** Validates persisted session envelopes without changing import/export session JSON shape. */
+/**
+ * Validates persisted storage envelopes while keeping import/export JSON independent.
+ *
+ * The app-level envelope is a browser-storage concern, not a domain-session concern,
+ * so this parser deliberately unwraps and validates that extra layer separately.
+ */
 export function deserializePersistedSessionEnvelope(
   serialized: string,
 ): PersistedSessionEnvelope {

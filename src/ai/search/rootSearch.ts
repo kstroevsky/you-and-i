@@ -25,6 +25,10 @@ import {
 import { actionKey, isSearchTimeout, makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
 import type { RootRankedAction, SearchContext, TranspositionEntry } from '@/ai/search/types';
 
+/**
+ * Builds a minimal ranked candidate when the search must fall back before it has
+ * produced full root statistics.
+ */
 function createRootFallbackCandidate(
   entry: {
     action: TurnAction;
@@ -53,10 +57,12 @@ function createRootFallbackCandidate(
   };
 }
 
+/** Counts how many root-ordered moves actually received non-zero model guidance. */
 function countPolicyPriorHits(ranked: Array<{ policyPrior: number }>): number {
   return ranked.reduce((count, entry) => count + (entry.policyPrior > 0 ? 1 : 0), 0);
 }
 
+/** Converts ordered-move entries into the public ranked-root shape used by fallback reporting. */
 function toFallbackRanked(
   orderedMoves: ReturnType<typeof orderMoves>,
 ): RootRankedAction[] {
@@ -99,6 +105,7 @@ export function chooseComputerAction({
   const rootPositionKey = makeTableKey(state);
   let fallbackScore: number | null = null;
 
+  /** Lazily computes the root static fallback so timeout/error paths stay cheap unless needed. */
   function getFallbackScore(): number {
     fallbackScore ??= evaluateState(
       state,
@@ -139,6 +146,10 @@ export function chooseComputerAction({
     table: new Map<string, TranspositionEntry>(),
   };
 
+  /**
+   * Root ordering is rebuilt at each depth because heuristic tables, TT moves, and
+   * PV hints evolve as the search learns more about the position.
+   */
   const buildRootOrdering = (pvMove: TurnAction | null): ReturnType<typeof orderMoves> =>
     orderMoves(state, state.currentPlayer, ruleConfig, preset, {
       actions: legalActions,
@@ -160,6 +171,7 @@ export function chooseComputerAction({
       continuationScores: context.continuationScores,
       ttMove: context.table.get(rootPositionKey)?.bestAction ?? null,
     });
+  /** Timeout fallback ordering avoids the deadline check so it can always produce a legal answer. */
   const buildOrderedFallback = (): ReturnType<typeof orderMoves> =>
     orderMoves(state, state.currentPlayer, ruleConfig, preset, {
       actions: legalActions,
@@ -280,6 +292,12 @@ export function chooseComputerAction({
     };
   }
 
+  /**
+   * Searches one complete root depth using the current aspiration window.
+   *
+   * A full ranked root list is returned so the caller can both pick the move and
+   * expose diagnostics/candidates without re-searching.
+   */
   const runDepthSearch = (
     depth: number,
     alphaWindow: number,

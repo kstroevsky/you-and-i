@@ -29,10 +29,12 @@ const FRIENDLY_TRANSFER_OFFSET = ADJACENT_OFFSET + ADJACENT_ACTION_COUNT;
 
 const COORDS = allCoords();
 
+/** Maps a board coordinate into the fixed action-head ordering shared by training and runtime. */
 function coordIndex(coord: Coord): number {
   return COORDS.indexOf(coord);
 }
 
+/** Converts geometric direction into the compact directional basis used by the model head. */
 function directionIndex(direction: DirectionVector | null): number {
   if (!direction) {
     return -1;
@@ -44,10 +46,15 @@ function directionIndex(direction: DirectionVector | null): number {
   );
 }
 
+/** Adjacent moves share the same geometry lattice and differ only by semantic action kind. */
 function adjacentKindIndex(action: TurnAction): number {
   return ADJACENT_ACTION_KINDS.indexOf(action.type as (typeof ADJACENT_ACTION_KINDS)[number]);
 }
 
+/**
+ * Friendly transfers use an all-to-all source/target encoding because they are not
+ * direction-local moves like adjacent steps and jumps.
+ */
 function encodeFriendlyTransferIndex(source: Coord, target: Coord): number {
   const sourceRank = coordIndex(source);
   const targets = COORDS.filter((coord) => coord !== source);
@@ -60,6 +67,12 @@ function encodeFriendlyTransferIndex(source: Coord, target: Coord): number {
   return FRIENDLY_TRANSFER_OFFSET + sourceRank * 35 + targetRank;
 }
 
+/**
+ * Bridges one legal domain action to the fixed policy-head index space.
+ *
+ * This mapping is the contract that must stay aligned across self-play data
+ * generation, training, ONNX export, and runtime inference.
+ */
 export function encodeActionIndex(action: TurnAction): number | null {
   switch (action.type) {
     case 'manualUnfreeze': {
@@ -102,6 +115,11 @@ export function encodeActionIndex(action: TurnAction): number | null {
   }
 }
 
+/**
+ * Masks raw model logits down to legal actions and turns them into normalized priors.
+ *
+ * The model never decides legality; it only reweights already legal actions.
+ */
 export function buildMaskedActionPriors(
   legalActions: TurnAction[],
   logits: ArrayLike<number>,
@@ -138,6 +156,7 @@ export function buildMaskedActionPriors(
   }, {});
 }
 
+/** Exposes action-space metadata for tests, tooling, and model/documentation sanity checks. */
 export function getActionSpaceMetadata() {
   return {
     actionCount: AI_MODEL_ACTION_COUNT,

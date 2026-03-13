@@ -17,6 +17,7 @@ export type SessionArchive = {
   saveLatest: (envelope: PersistedSessionEnvelope<'full'>) => Promise<void>;
 };
 
+/** Normalizes callback-style IndexedDB requests into promise-based control flow. */
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -24,6 +25,7 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+/** Opens the archive database and creates the single-record store on first use. */
 function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = factory.open(ARCHIVE_DB_NAME, ARCHIVE_DB_VERSION);
@@ -40,6 +42,7 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   });
 }
 
+/** Opens a transaction, exposes its object store, and waits for transaction completion safely. */
 async function withStore<T>(
   factory: IDBFactory,
   mode: IDBTransactionMode,
@@ -67,6 +70,7 @@ async function withStore<T>(
   }
 }
 
+/** Creates the optional full-history archive used to complement compact localStorage boot. */
 export function createIndexedDbSessionArchive(): SessionArchive | null {
   if (typeof indexedDB === 'undefined') {
     return null;

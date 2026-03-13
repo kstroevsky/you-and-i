@@ -59,10 +59,12 @@ export type ActionStrategicProfile = {
 const ANALYSIS_CACHE_LIMIT = 50_000;
 const analysisCache = new Map<string, PositionAnalysis>();
 
+/** Strategic scoring stays symmetric, so opponent lookup is centralized once. */
 function getOpponent(player: Player): Player {
   return player === 'white' ? 'black' : 'white';
 }
 
+/** Seeds the per-player feature vector used by the strategic analysis pass. */
 function createPlayerAnalysis(): PlayerAnalysis {
   return {
     buriedDebt: 0,
@@ -83,6 +85,12 @@ function createPlayerAnalysis(): PlayerAnalysis {
   };
 }
 
+/**
+ * Measures how far a checker still is from satisfying the home-field victory plan.
+ *
+ * This feature is intentionally coarse: the strategic layer cares about directional
+ * progress toward a win condition, not exact shortest tactical paths.
+ */
 function distanceToHomeRows(player: Player, row: number): number {
   if (HOME_ROWS[player].has(row as never)) {
     return 0;
@@ -91,16 +99,24 @@ function distanceToHomeRows(player: Player, row: number): number {
   return player === 'white' ? Math.max(0, 4 - row) : Math.max(0, row - 3);
 }
 
+/** Counts only material that can currently contribute to mobility and pressure. */
 function isActiveMover(state: EngineState, coord: Coord, player: Player): boolean {
   return isMovableSingle(state.board, coord, player) || isControlledStack(state.board, coord, player);
 }
 
+/** Marks rows where frozen singles are strategically expensive for that player. */
 function isCriticalRow(coord: Coord, player: Player): boolean {
   const { row } = parseCoord(coord);
 
   return HOME_ROWS[player].has(row as never) || row === FRONT_HOME_ROW[player];
 }
 
+/**
+ * Estimates local mobility and jump potential around one coordinate.
+ *
+ * These numbers are not legal-action counts; they are cheaper structural signals
+ * used to infer how open or cramped the position feels.
+ */
 function countDirectionalOpenness(
   state: EngineState,
   coord: Coord,
@@ -138,6 +154,12 @@ function countDirectionalOpenness(
   };
 }
 
+/**
+ * Accumulates features that matter specifically for the six-stack win plan.
+ *
+ * Stack control, front-row height, and mixed-color stack ownership all influence
+ * whether a player is converting material into durable stack structures.
+ */
 function addStackStructure(
   state: EngineState,
   coord: Coord,
@@ -175,6 +197,12 @@ function addStackStructure(
   }
 }
 
+/**
+ * One board scan populates both players' strategic feature vectors.
+ *
+ * Doing this in one pass keeps the analysis cheap enough to reuse in move ordering,
+ * evaluation, and reporting.
+ */
 function addCellAnalysis(
   state: EngineState,
   coord: Coord,
@@ -246,6 +274,12 @@ function addCellAnalysis(
   }
 }
 
+/**
+ * Chooses the macro phase that should bias the evaluation weights.
+ *
+ * The intent is not to classify the position perfectly, but to distinguish early
+ * transport/opening play from later conversion-heavy or stack-building play.
+ */
 function derivePhase(analysis: PositionAnalysis): StrategicPhase {
   const white = analysis.players.white;
   const black = analysis.players.black;
@@ -268,6 +302,7 @@ function derivePhase(analysis: PositionAnalysis): StrategicPhase {
   return 'transport';
 }
 
+/** Builds the cached position-wide structural summary reused throughout the AI. */
 function buildAnalysis(state: EngineState): PositionAnalysis {
   const analysis: PositionAnalysis = {
     emptyCells: 0,
@@ -287,6 +322,7 @@ function buildAnalysis(state: EngineState): PositionAnalysis {
   return analysis;
 }
 
+/** Keeps the analysis cache bounded so search quality does not grow browser memory unboundedly. */
 function rememberAnalysis(key: string, analysis: PositionAnalysis): PositionAnalysis {
   if (analysisCache.size >= ANALYSIS_CACHE_LIMIT) {
     const oldestKey = analysisCache.keys().next().value;
@@ -300,6 +336,12 @@ function rememberAnalysis(key: string, analysis: PositionAnalysis): PositionAnal
   return analysis;
 }
 
+/**
+ * Reweights the same raw features depending on the inferred macro phase.
+ *
+ * This is why the evaluator can value lane creation more in early transport play
+ * while emphasizing front-row stack mass later.
+ */
 function getPhaseWeights(phase: StrategicPhase): {
   home: number;
   lane: number;
@@ -331,6 +373,10 @@ function getPhaseWeights(phase: StrategicPhase): {
   }
 }
 
+/**
+ * Projects the structural analysis into three competing strategic narratives:
+ * home-field conversion, front-row six-stack construction, or a hybrid posture.
+ */
 function buildIntentProfile(
   analysis: PositionAnalysis,
   player: Player,
@@ -396,6 +442,7 @@ function buildIntentProfile(
   };
 }
 
+/** Reduces the richer intent profile to the scalar plan score used by evaluation and ordering. */
 function getIntentScore(profile: IntentProfile): number {
   switch (profile.intent) {
     case 'home':
@@ -407,6 +454,7 @@ function getIntentScore(profile: IntentProfile): number {
   }
 }
 
+/** Normalizes heterogeneous actions onto a common target coordinate abstraction. */
 function targetCoord(action: TurnAction): Coord | null {
   switch (action.type) {
     case 'manualUnfreeze':
@@ -418,6 +466,7 @@ function targetCoord(action: TurnAction): Coord | null {
   }
 }
 
+/** Normalizes heterogeneous actions onto a common source coordinate abstraction. */
 function sourceCoord(action: TurnAction): Coord | null {
   switch (action.type) {
     case 'manualUnfreeze':
@@ -429,12 +478,14 @@ function sourceCoord(action: TurnAction): Coord | null {
   }
 }
 
+/** Keeps semantic move tagging declarative so heuristics describe intent rather than control flow. */
 function addTag(tags: Set<AiStrategicTag>, condition: boolean, tag: AiStrategicTag): void {
   if (condition) {
     tags.add(tag);
   }
 }
 
+/** Returns the cached structural interpretation of a position, building it on demand. */
 export function analyzePosition(state: EngineState): PositionAnalysis {
   const key = hashPosition(state);
   const cached = analysisCache.get(key);
@@ -446,6 +497,7 @@ export function analyzePosition(state: EngineState): PositionAnalysis {
   return rememberAnalysis(key, buildAnalysis(state));
 }
 
+/** Classifies which win plan the player is currently best aligned with. */
 export function getStrategicIntent(
   state: EngineState,
   player: Player,
@@ -453,6 +505,12 @@ export function getStrategicIntent(
   return buildIntentProfile(analyzePosition(state), player);
 }
 
+/**
+ * Scores a position by contrasting each player's strategic plan quality.
+ *
+ * This is intentionally plan-centric rather than tactic-complete; the tree search
+ * handles short tactical forcing lines, while this layer explains long-horizon shape.
+ */
 export function getStrategicScore(state: EngineState, player: Player): number {
   const opponent = getOpponent(player);
   const analysis = analyzePosition(state);
@@ -471,6 +529,12 @@ export function getStrategicScore(state: EngineState, player: Player): number {
   );
 }
 
+/**
+ * Tags how one candidate move changes the player's strategic story.
+ *
+ * The returned tags and scalar deltas feed both move ordering and the diagnostic
+ * surface exposed to tests and reports.
+ */
 export function getActionStrategicProfile(
   state: EngineState,
   action: TurnAction,
@@ -580,6 +644,7 @@ export function getActionStrategicProfile(
   };
 }
 
+/** Penalizes repeating the exact same semantic move story on consecutive same-side turns. */
 export function getNoveltyPenalty(
   currentTags: AiStrategicTag[],
   previousTags: AiStrategicTag[] | null | undefined,
@@ -591,6 +656,12 @@ export function getNoveltyPenalty(
   return currentTags.every((tag) => previousTags.includes(tag)) ? 90 : 0;
 }
 
+/**
+ * Reconstructs the previous same-side move tags from history.
+ *
+ * Novelty scoring needs semantic continuity, not just action identity, so this
+ * helper derives the prior strategic "story" from committed history.
+ */
 export function inferPreviousStrategicTags(
   state: EngineState,
   player: Player,

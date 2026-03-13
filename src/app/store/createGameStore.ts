@@ -17,7 +17,13 @@ export type {
   StoreOptions,
 } from '@/app/store/createGameStore/types';
 
-/** Public store factory that composes the internal store modules. */
+/**
+ * Public store factory that assembles one complete game runtime.
+ *
+ * Callers should use this entry point instead of constructing submodules manually,
+ * because boot-time storage selection, archive hydration policy, and post-create
+ * side effects must stay aligned for the store to behave correctly.
+ */
 export function createGameStore(options: StoreOptions = {}): GameStore {
   const storage =
     options.storage ??

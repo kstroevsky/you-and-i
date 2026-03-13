@@ -67,6 +67,11 @@ export type OrderMovesOptions = {
   ttMove?: TurnAction | null;
 };
 
+/**
+ * Move ordering can consume a large fraction of the search budget because it
+ * simulates every legal move. This keeps timeout semantics aligned with the
+ * main search rather than letting ordering overrun the allocated time.
+ */
 function throwIfMoveOrderingTimedOut(deadline?: number, now?: () => number): void {
   if (deadline === undefined || !now) {
     return;
@@ -84,10 +89,17 @@ function isSameAction(left: TurnAction | null | undefined, right: TurnAction): b
   return actionKey(left) === actionKey(right);
 }
 
+/** Repetition pressure is evaluated on the post-move state so drawish lines sink in ordering. */
 function getRepeatedPositionCount(state: EngineState): number {
   return state.positionCounts[hashPosition(state)] ?? 0;
 }
 
+/**
+ * Normalizes "how much material moved" across action kinds.
+ *
+ * This is used by participation and self-undo heuristics, where the important
+ * question is not only which move type fired, but how much mass it reused.
+ */
 function movedCheckerCount(action: TurnAction): number {
   switch (action.type) {
     case 'splitTwoFromStack':
@@ -100,6 +112,12 @@ function movedCheckerCount(action: TurnAction): number {
   }
 }
 
+/**
+ * Projects heterogeneous action variants onto a simple source/target geometry.
+ *
+ * Several anti-repetition and self-undo heuristics need a common language that
+ * works across jumps, step moves, and manual actions.
+ */
 function getSourceTarget(
   action: TurnAction,
 ): { source: string; target: string } | null {
@@ -119,6 +137,12 @@ function getSourceTarget(
   }
 }
 
+/**
+ * Detects the simplest "take back my own previous move" pattern.
+ *
+ * This exists because a local search without memory can otherwise look tactically
+ * competent while oscillating between equivalent geometries on quiet turns.
+ */
 function isDirectSelfUndo(
   action: TurnAction,
   previousOwnAction: TurnAction | null | undefined,

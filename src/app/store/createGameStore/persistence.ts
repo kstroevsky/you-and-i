@@ -13,7 +13,7 @@ import {
   serializePersistedSessionEnvelope,
 } from '@/app/store/sessionPersistence';
 
-/** Removes legacy storage keys once the v4 envelope has been written. */
+/** Removes superseded keys once the current envelope has been persisted successfully. */
 export function clearLegacySessionKeys(storage?: Storage): void {
   if (!storage) {
     return;
@@ -24,7 +24,13 @@ export function clearLegacySessionKeys(storage?: Storage): void {
   }
 }
 
-/** Writes the compact local session envelope and swallows quota/storage failures. */
+/**
+ * Writes the fast-boot compact snapshot to localStorage.
+ *
+ * This intentionally does not throw: losing persistence must not corrupt the live
+ * game, so the store treats browser quota/storage failures as degraded persistence,
+ * not as gameplay failures.
+ */
 export function persistSessionSnapshot(
   session: SerializableSession,
   sessionId: string,
@@ -62,7 +68,7 @@ export function persistSessionSnapshot(
   }
 }
 
-/** Detects the old default rules that were persisted before the default-policy change. */
+/** Detects historical default-rule payloads that should be migrated only when untouched. */
 export function hasLegacyRuleDefaults(ruleConfig: RuleConfig): boolean {
   return (
     ruleConfig.allowNonAdjacentFriendlyStackTransfer ===
@@ -72,7 +78,7 @@ export function hasLegacyRuleDefaults(ruleConfig: RuleConfig): boolean {
   );
 }
 
-/** Limits default migration to untouched sessions so active games remain unchanged. */
+/** Limits default migration to pristine sessions so existing matches keep their original rules. */
 export function isUntouchedSession(session: SerializableSession): boolean {
   return (
     session.turnLog.length === 0 &&
@@ -82,7 +88,7 @@ export function isUntouchedSession(session: SerializableSession): boolean {
   );
 }
 
-/** Migrates stale untouched sessions to the current rule defaults. */
+/** Rewrites only pristine legacy sessions to the current rule defaults. */
 export function migrateLegacyRuleDefaults(
   session: SerializableSession,
 ): { session: SerializableSession; migrated: boolean } {
@@ -99,7 +105,13 @@ export function migrateLegacyRuleDefaults(
   };
 }
 
-/** Reads the best synchronous session snapshot before async archive hydration begins. */
+/**
+ * Selects the fastest trustworthy startup session before async archive hydration.
+ *
+ * The selection order is deliberate: injected test/session data wins first,
+ * current-version compact local snapshots are next, legacy payloads are migrated
+ * as a compatibility fallback, and only then does the store create a fresh match.
+ */
 export function getInitialPersistenceState(options: StoreOptions): InitialPersistenceState {
   const createId = options.createSessionId ?? createSessionId;
   const archiveAvailable = options.archive !== null && options.archive !== undefined;

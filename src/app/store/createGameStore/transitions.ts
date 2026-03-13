@@ -72,12 +72,25 @@ export function createStoreTransitions({
   syncComputerTurn,
   updateSessionMeta,
 }: StoreTransitionsOptions) {
+  /**
+   * Persists the canonical session slices after a state transition.
+   *
+   * The store never persists ad hoc UI-only fields here; it rebuilds the
+   * serializable session from the authoritative slices that matter across reloads.
+   */
   function persistCurrentState(nextState: SessionSlices): void {
     persistRuntimeSession(buildSessionFromSlices(nextState), {
       persistArchive: true,
     });
   }
 
+  /**
+   * Central gameplay commit path for human and AI turns.
+   *
+   * This is where a pure domain transition becomes a full application transition:
+   * history is advanced, interaction state is updated, AI state is reset, and the
+   * next persisted session snapshot is emitted.
+   */
   function commitAction(action: TurnAction, aiDecision: AiSearchResult | null = null): void {
     const state = get();
     const nextHistoryHydrationStatus = consumeStartupHydrationOnMutation();
@@ -139,6 +152,7 @@ export function createStoreTransitions({
   }
 
   return {
+    /** Restores one undo/redo step while keeping persistence and AI state consistent. */
     applyHistoryStep(direction: 'backward' | 'forward'): boolean {
       disposeAiWorker();
       const state = get();
@@ -160,6 +174,7 @@ export function createStoreTransitions({
 
       return true;
     },
+    /** Replaces the live session from import, hydration, or test-controlled boot data. */
     applySession(session: SerializableSession, options: ApplySessionOptions = {}): void {
       disposeAiWorker();
       const historyHydrationStatus = updateSessionMeta(options);

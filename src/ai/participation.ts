@@ -2,7 +2,6 @@ import { analyzePosition } from '@/ai/strategy';
 import type { AiDifficultyPreset } from '@/ai/types';
 import {
   getCell,
-  getCellHeight,
   getTopChecker,
   isStack,
 } from '@/domain/model/board';

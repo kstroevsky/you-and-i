@@ -85,7 +85,7 @@ export function applyValidatedAction(
 
       return {
         board: result.board,
-        pendingJump: !state.pendingJump && continuationTargets.length
+        pendingJump: continuationTargets.length
           ? {
               source: result.currentCoord,
               visitedStateKeys: [...result.visited],

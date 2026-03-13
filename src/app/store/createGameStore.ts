@@ -5,9 +5,7 @@ import { getInitialPersistenceState } from '@/app/store/createGameStore/persiste
 import { createIndexedDbSessionArchive } from '@/app/store/sessionArchive';
 import type {
   GameStore,
-  GameStoreData,
   GameStoreState,
-  HistoryHydrationStatus,
   StoreOptions,
 } from '@/app/store/createGameStore/types';
 

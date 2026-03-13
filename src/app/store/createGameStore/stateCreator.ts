@@ -1,7 +1,5 @@
 import type { StoreApi } from 'zustand/vanilla';
 
-import { createEmptyTargetMap } from '@/domain';
-
 import { createAiController } from '@/app/store/createGameStore/aiController';
 import { createDerivationCache } from '@/app/store/createGameStore/derivations';
 import { isComputerTurn } from '@/app/store/createGameStore/match';

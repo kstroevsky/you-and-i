@@ -10,7 +10,6 @@ import { uniqueValues } from '@/shared/utils/collections';
 import type { InteractionState } from '@/shared/types/session';
 
 import type {
-  GameStoreData,
   JumpFollowUpSelection,
   SelectionStateSlice,
 } from '@/app/store/createGameStore/types';

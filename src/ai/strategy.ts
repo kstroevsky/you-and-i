@@ -5,14 +5,12 @@ import {
   getAdjacentCoord,
   getJumpLandingCoord,
   parseCoord,
-  type DirectionVector,
 } from '@/domain/model/coordinates';
 import { hashPosition } from '@/domain/model/hash';
 import type { Coord, EngineState, Player, TurnAction } from '@/domain/model/types';
 import {
   canJumpOverCell,
   isControlledStack,
-  isFrozenSingle,
   isMovableSingle,
 } from '@/domain/validators/stateValidators';
 import type { AiStrategicIntent, AiStrategicTag } from '@/ai/types';

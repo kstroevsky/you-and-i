@@ -16,7 +16,6 @@ import {
 import {
   getActionStrategicProfile,
   getNoveltyPenalty,
-  type ActionStrategicProfile,
 } from '@/ai/strategy';
 import { actionKey, throwIfTimedOut } from '@/ai/search/shared';
 import { getCellHeight, getTopChecker } from '@/domain/model/board';

@@ -1,4 +1,5 @@
 @use '../../../styles/tokens' as tokens;
+@use '../../../styles/mixins' as mixins;
 
 .root {
   flex: 0 0 auto;
@@ -19,6 +20,14 @@
   border: 1px solid tokens.$color-brown-950;
   background: #2a1708;
   color: tokens.$color-cream-200;
+  display: flex;
+  align-items: center;
+  gap: 1%;
+
+  button {
+    height: fit-content;
+    margin-right: 1%;
+  }
 
   p,
   small {
@@ -33,6 +42,16 @@
 
   small {
     color: tokens.$color-brown-100;
+  }
+}
+
+@include mixins.max-width(tokens.$bp-lg) {
+  .turnBanner {
+    justify-content: space-between;
+
+    button {
+      margin: 0;
+    }
   }
 }
 

@@ -20,7 +20,7 @@ export const INTERACTION_COPY: Record<Language, InteractionCopy> = {
     pieceSelected: (source) => `Selected ${source}. Choose a move type.`,
     actionTypeSelected: (action) => `Action ${action} is selected.`,
     jumpFollowUp: (source) =>
-      `Jump from ${source} earned one extra move. Continue there or choose any legal move.`,
+      `Jump from ${source} keeps the turn. Continue jumping there or choose any legal move.`,
     choosingTarget: (action, source) => `Choose a target for ${action} from ${source}.`,
     buildingJumpChain: (source) =>
       `Choose the next jump landing from ${source}. Each click applies one segment immediately.`,
@@ -33,7 +33,7 @@ export const INTERACTION_COPY: Record<Language, InteractionCopy> = {
     pieceSelected: (source) => `Выбрана ${source}. Теперь выберите тип хода.`,
     actionTypeSelected: (action) => `Выбрано действие «${action}».`,
     jumpFollowUp: (source) =>
-      `Прыжок из ${source} дал ещё одно действие. Продолжайте им или выберите любой допустимый ход.`,
+      `Прыжок из ${source} сохраняет ход. Продолжайте прыжок им или выберите любой допустимый ход.`,
     choosingTarget: (action, source) => `Выберите цель для «${action}» из ${source}.`,
     buildingJumpChain: (source) =>
       `Выберите следующую цель прыжка из ${source}. Каждый клик применяет один участок сразу.`,

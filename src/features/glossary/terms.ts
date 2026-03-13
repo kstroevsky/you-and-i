@@ -31,9 +31,9 @@ const GLOSSARY: Record<GlossaryTermId, GlossaryEntry> = {
     },
     description: {
       english:
-        'A jump is applied one segment at a time over single checkers into empty cells. If another segment is available, the same player gets one extra action and may either continue the jump or make any other legal move.',
+        'A jump is applied one segment at a time over single checkers into empty cells. If another segment is available, the same player keeps the turn and may either continue jumping or make any other legal move.',
       russian:
-        'Прыжок применяется по одному участку через одиночные шашки на пустые клетки. Если следующий участок доступен, тот же игрок получает ещё одно действие и может либо продолжить прыжок, либо сделать любой другой допустимый ход.',
+        'Прыжок применяется по одному участку через одиночные шашки на пустые клетки. Если следующий участок доступен, тот же игрок сохраняет ход и может либо продолжить прыжок, либо сделать любой другой допустимый ход.',
     },
   },
   manualUnfreeze: {

@@ -51,6 +51,7 @@ export function TurnSummaryStrip({ compact = false }: TurnSummaryStripProps) {
     selectedCell,
     victory,
     onRetryComputerMove,
+    onCancel,
   } = useGameStore(
     useShallow((state) => ({
       aiStatus: state.aiStatus,
@@ -62,6 +63,7 @@ export function TurnSummaryStrip({ compact = false }: TurnSummaryStripProps) {
       selectedCell: state.selectedCell,
       victory: state.gameState.victory,
       onRetryComputerMove: state.retryComputerMove,
+      onCancel: state.cancelInteraction,
     })),
   );
   const victoryTermId = getVictoryTermId(victory);
@@ -81,8 +83,13 @@ export function TurnSummaryStrip({ compact = false }: TurnSummaryStripProps) {
   return (
     <div className={styles.summary} data-compact={compact || undefined}>
       <div className={styles.turnBanner}>
-        <p>{formatTurnBanner(language, currentPlayer)}</p>
-        <small>{interactionCopy}</small>
+        <div>
+          <p>{formatTurnBanner(language, currentPlayer)}</p>
+          <small>{interactionCopy}</small>
+        </div>
+        <Button variant="active" onClick={onCancel}>
+            {text(language, 'clear')}
+        </Button>
       </div>
 
       <div className={styles.metaGrid}>

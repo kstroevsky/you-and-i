@@ -220,7 +220,7 @@ describe('game engine moves', () => {
     expect(afterSecondJump.pendingJump).toBeNull();
   });
 
-  it('does not grant a third action when the follow-up move is another jump with continuation', () => {
+  it('keeps the turn alive when the follow-up move is another jump with continuation', () => {
     const state = gameStateWithBoard(
       boardWithPieces({
         A1: [checker('white')],
@@ -262,8 +262,8 @@ describe('game engine moves', () => {
       withConfig(),
     );
 
-    expect(afterFollowUpJump.currentPlayer).toBe('black');
-    expect(afterFollowUpJump.pendingJump).toBeNull();
+    expect(afterFollowUpJump.currentPlayer).toBe('white');
+    expect(afterFollowUpJump.pendingJump?.source).toBe('C5');
   });
 
   it('ends the game immediately when a winning jump would otherwise leave a follow-up', () => {

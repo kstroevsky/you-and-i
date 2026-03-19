@@ -219,16 +219,16 @@ Freezing changes only the checker's state, not its owner.
 
 ## 11. Jumping over a frozen checker
 
-A frozen checker may be jumped over **only by its owner**, and only for the purpose of unfreezing it.
+A frozen checker may be jumped over by **either player**.
 
 That means:
 
 * White may jump over a White frozen checker
+* White may jump over a Black frozen checker
 * Black may jump over a Black frozen checker
+* Black may jump over a White frozen checker
 * the landing cell must still be empty
 * after that jump, the frozen checker becomes active again
-
-An opponent may **not** jump over your frozen checker.
 
 ---
 
@@ -262,8 +262,8 @@ A frozen checker:
 * cannot be part of a stack
 * cannot be climbed onto
 * cannot be used as the landing cell of another move
-* cannot be jumped over by the opponent
-* may be jumped over only by its owner to unfreeze it
+* may be jumped over by either player
+* becomes active again after that jump
 
 So a frozen checker is a blocked single checker.
 
@@ -316,7 +316,7 @@ That means:
 * the landing cell must be **empty**
 * a stack may not jump over another stack
 * if a stack jumps over an opponent's active single checker, that checker becomes frozen
-* if a stack jumps over one of your frozen single checkers, that checker becomes active again
+* if a stack jumps over a frozen single checker, that checker becomes active again
 
 The full stack moves together.
 
@@ -409,7 +409,6 @@ The following are illegal:
 * creating a stack higher than 3
 * moving a checker that is not on top of its stack
 * moving a frozen checker
-* jumping over an opponent's frozen checker
 
 ---
 

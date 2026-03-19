@@ -31,9 +31,9 @@ const GLOSSARY: Record<GlossaryTermId, GlossaryEntry> = {
     },
     description: {
       english:
-        'A jump is applied one segment at a time over single checkers into empty cells. If another segment is available, the same player keeps the turn and may either continue jumping or make any other legal move.',
+        'A jump is applied one segment at a time over single checkers, including frozen singles, into empty cells. Frozen checkers thaw when jumped, and if another segment is available the same player keeps the turn and may either continue jumping or make any other legal move.',
       russian:
-        'Прыжок применяется по одному участку через одиночные шашки на пустые клетки. Если следующий участок доступен, тот же игрок сохраняет ход и может либо продолжить прыжок, либо сделать любой другой допустимый ход.',
+        'Прыжок применяется по одному участку через одиночные шашки, включая замороженные, на пустые клетки. Замороженные шашки оттаивают после такого прыжка, и если следующий участок доступен, тот же игрок сохраняет ход и может либо продолжить прыжок, либо сделать любой другой допустимый ход.',
     },
   },
   manualUnfreeze: {

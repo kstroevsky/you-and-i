@@ -182,7 +182,7 @@ The deterministic ids are especially important for tests, serialization consiste
 | `isFrozenSingle()` / `isActiveSingle()` | Separate piece state from ownership or stack logic |
 | `isControlledStack()` / `isMovableSingle()` | Express who is allowed to move what |
 | `canLandOnOccupiedCell()` | Centralizes climb/transfer landing rules |
-| `canJumpOverCell()` | Encodes the special jump-over rule for active and frozen singles |
+| `canJumpOverCell()` | Encodes the special jump-over rule for any single checker |
 | `validateBoard()` | Enforces structural board invariants after every legal action |
 | `validateGameState()` | Enforces global invariants: board validity, exact piece counts, and valid `pendingJump` |
 | `isAdjacentCoord()` | App-layer alias that keeps naming explicit |

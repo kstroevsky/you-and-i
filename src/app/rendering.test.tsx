@@ -19,9 +19,18 @@ type RenderProbeProps = {
 };
 
 function BoardProbe({ onRender }: RenderProbeProps) {
-  const { board, language, legalTargets, selectedCell, selectableCoords, onSelectCell } = useGameStore(
+  const {
+    board,
+    jumpFollowUpSource,
+    language,
+    legalTargets,
+    selectedCell,
+    selectableCoords,
+    onSelectCell,
+  } = useGameStore(
     useShallow((state) => ({
       board: state.gameState.board,
+      jumpFollowUpSource: state.interaction.type === 'jumpFollowUp' ? state.interaction.source : null,
       language: state.preferences.language,
       legalTargets: state.legalTargets,
       selectedCell: state.selectedCell,
@@ -36,6 +45,7 @@ function BoardProbe({ onRender }: RenderProbeProps) {
   return (
     <Board
       board={board}
+      jumpFollowUpSource={jumpFollowUpSource}
       language={language}
       legalTargets={legalTargets}
       selectedCell={selectedCell}

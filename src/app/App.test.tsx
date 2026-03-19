@@ -6,7 +6,7 @@ import { App } from '@/app/App';
 import { GameStoreProvider } from '@/app/providers/GameStoreProvider';
 import { createInitialState } from '@/domain';
 import type { SerializableSession } from '@/shared/types/session';
-import { createSession, resetFactoryIds } from '@/test/factories';
+import { boardWithPieces, checker, createSession, gameStateWithBoard, resetFactoryIds } from '@/test/factories';
 
 function renderApp(session = createSession(createInitialState())) {
   return render(
@@ -46,6 +46,32 @@ describe('App', () => {
 
     expect(screen.queryByRole('dialog', { name: 'Выберите ход' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Клетка B2' })).toHaveAttribute('data-target', 'true');
+  });
+
+  it('shows a jump-follow-up callout and source highlight after a jump', async () => {
+    const user = userEvent.setup();
+    const session = createSession(
+      gameStateWithBoard(
+        boardWithPieces({
+          A1: [checker('white')],
+          B2: [checker('white')],
+          D4: [checker('white')],
+          F6: [checker('black')],
+        }),
+      ),
+    );
+
+    renderApp(session);
+
+    await user.click(await screen.findByRole('button', { name: 'Клетка A1' }));
+    await user.click(await screen.findByRole('button', { name: 'Прыжок' }));
+    await user.click(screen.getByRole('button', { name: 'Клетка C3' }));
+
+    expect(
+      await screen.findByText(/Цепочка прыжков готова из C3/i, {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Эта подсвеченная шашка может продолжать прыгать/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Клетка C3' })).toHaveAttribute('data-followup', 'true');
   });
 
   it('switches the interface language globally, including lazy-loaded tabs', async () => {

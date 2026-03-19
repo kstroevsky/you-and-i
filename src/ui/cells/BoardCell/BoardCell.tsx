@@ -12,6 +12,7 @@ type BoardCellProps = {
   cell: Cell;
   coord: Coord;
   isDarkField: boolean;
+  isJumpFollowUpSource: boolean;
   isLegalTarget: boolean;
   isSelected: boolean;
   isSelectable: boolean;
@@ -23,6 +24,7 @@ export const BoardCell = memo(function BoardCell({
   cell,
   coord,
   isDarkField,
+  isJumpFollowUpSource,
   isLegalTarget,
   isSelected,
   isSelectable,
@@ -34,6 +36,7 @@ export const BoardCell = memo(function BoardCell({
       type="button"
       className={styles.root}
       data-tone={isDarkField ? 'dark' : 'light'}
+      data-followup={isJumpFollowUpSource || undefined}
       data-selectable={isSelectable || undefined}
       data-selected={isSelected || undefined}
       data-target={isLegalTarget || undefined}
@@ -41,7 +44,10 @@ export const BoardCell = memo(function BoardCell({
       aria-label={`${text(language, 'cellLabel')} ${coord}`}
     >
       {cell.checkers.length ? (
-        <CheckerStack checkers={cell.checkers} emphasized={isSelected || isLegalTarget} />
+        <CheckerStack
+          checkers={cell.checkers}
+          emphasized={isSelected || isLegalTarget || isJumpFollowUpSource}
+        />
       ) : null}
       {isLegalTarget ? <span className={styles.marker} /> : null}
     </button>

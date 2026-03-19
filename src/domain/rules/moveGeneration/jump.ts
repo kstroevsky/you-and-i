@@ -121,7 +121,7 @@ function applySingleJumpSegment(
     return { valid: false, reason: 'Jump segment has no middle coordinate.' };
   }
 
-  if (!canJumpOverCell(board, movingPlayer, middleCoord)) {
+  if (!canJumpOverCell(board, middleCoord)) {
     return { valid: false, reason: `Cannot jump over ${middleCoord}.` };
   }
 
@@ -144,10 +144,10 @@ function applySingleJumpSegment(
     return { valid: false, reason: `Middle checker missing at ${middleCoord}.` };
   }
 
-  if (middleChecker.owner !== movingPlayer) {
-    setSingleCheckerFrozen(board, middleCoord, true);
-  } else if (middleChecker.frozen) {
+  if (middleChecker.frozen) {
     setSingleCheckerFrozen(board, middleCoord, false);
+  } else if (middleChecker.owner !== movingPlayer) {
+    setSingleCheckerFrozen(board, middleCoord, true);
   }
 
   return validateBoard(board);
@@ -204,7 +204,7 @@ export function resolveJumpPath(
 }
 
 /** Returns immediate legal jump landings from a coordinate on a specific board. */
-function getJumpTargetsOnBoard(board: Board, source: Coord, movingPlayer: Player): Coord[] {
+function getJumpTargetsOnBoard(board: Board, source: Coord, _movingPlayer: Player): Coord[] {
   return DIRECTION_VECTORS.flatMap((direction) => {
     const jumpedCoord = getAdjacentCoord(source, direction);
     const landingCoord = getJumpLandingCoord(source, direction);
@@ -213,7 +213,7 @@ function getJumpTargetsOnBoard(board: Board, source: Coord, movingPlayer: Player
       return [];
     }
 
-    if (!canJumpOverCell(board, movingPlayer, jumpedCoord)) {
+    if (!canJumpOverCell(board, jumpedCoord)) {
       return [];
     }
 

@@ -127,8 +127,8 @@ describe('game engine moves', () => {
     expect(afterThaw.board.B2.checkers[0].frozen).toBe(false);
   });
 
-  it('allows only owner to jump over frozen single checker', () => {
-    const blockedState = gameStateWithBoard(
+  it('allows jumping over any frozen single checker and thaws it', () => {
+    const frozenOpponentState = gameStateWithBoard(
       boardWithPieces({
         A1: [checker('black')],
         B2: [checker('white', true)],
@@ -141,7 +141,7 @@ describe('game engine moves', () => {
 
     expect(
       validateAction(
-        blockedState,
+        frozenOpponentState,
         {
           type: 'jumpSequence',
           source: 'A1',
@@ -149,17 +149,10 @@ describe('game engine moves', () => {
         },
         withConfig(),
       ),
-    ).toEqual({ valid: false, reason: 'Cannot jump over B2.' });
+    ).toEqual({ valid: true });
 
-    const ownerState = gameStateWithBoard(
-      boardWithPieces({
-        A1: [checker('white')],
-        B2: [checker('white', true)],
-        F6: [checker('black')],
-      }),
-    );
-    const afterOwnerJump = applyAction(
-      ownerState,
+    const afterFrozenOpponentJump = applyAction(
+      frozenOpponentState,
       {
         type: 'jumpSequence',
         source: 'A1',
@@ -168,7 +161,26 @@ describe('game engine moves', () => {
       withConfig(),
     );
 
-    expect(afterOwnerJump.board.B2.checkers[0].frozen).toBe(false);
+    expect(afterFrozenOpponentJump.board.B2.checkers[0].frozen).toBe(false);
+
+    const frozenOwnState = gameStateWithBoard(
+      boardWithPieces({
+        A1: [checker('white')],
+        B2: [checker('white', true)],
+        F6: [checker('black')],
+      }),
+    );
+    const afterFrozenOwnJump = applyAction(
+      frozenOwnState,
+      {
+        type: 'jumpSequence',
+        source: 'A1',
+        path: ['C3'],
+      },
+      withConfig(),
+    );
+
+    expect(afterFrozenOwnJump.board.B2.checkers[0].frozen).toBe(false);
   });
 
   it('keeps the same player on a jump follow-up and allows any legal second action', () => {

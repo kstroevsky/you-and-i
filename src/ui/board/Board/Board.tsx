@@ -12,6 +12,7 @@ import styles from './style.module.scss';
 type BoardProps = {
   board: GameBoard;
   language: Language;
+  jumpFollowUpSource: Coord | null;
   legalTargets: Coord[];
   selectedCell: Coord | null;
   selectableCoords: Coord[];
@@ -26,6 +27,7 @@ const DISPLAY_CELLS = displayCoords().map((coord) => ({
 export const Board = memo(function Board({
   board,
   language,
+  jumpFollowUpSource,
   legalTargets,
   selectedCell,
   selectableCoords,
@@ -51,6 +53,7 @@ export const Board = memo(function Board({
                   cell={board[coord]}
                   coord={coord}
                   isDarkField={isDarkField}
+                  isJumpFollowUpSource={jumpFollowUpSource === coord}
                   language={language}
                   isLegalTarget={targets.has(coord)}
                   isSelected={selectedCell === coord}

@@ -72,6 +72,7 @@ export function TurnSummaryStrip({ compact = false }: TurnSummaryStripProps) {
   const isMoveActive =
     selectedCell !== null && availableActionKinds.length > 0;
   const victoryTermId = getVictoryTermId(victory);
+  const jumpFollowUp = interaction.type === 'jumpFollowUp' ? interaction : null;
   const isComputerTurn =
     matchSettings.opponentMode === 'computer' && currentPlayer !== matchSettings.humanPlayer;
   const interactionCopy =
@@ -96,6 +97,14 @@ export function TurnSummaryStrip({ compact = false }: TurnSummaryStripProps) {
             {text(language, 'clear')}
         </Button>
       </div>
+
+      {jumpFollowUp ? (
+        <div className={styles.jumpFollowUpCallout}>
+          <p className={styles.jumpFollowUpLabel}>{text(language, 'jumpPathLabel')}</p>
+          <strong>{jumpFollowUp.source}</strong>
+          <small>{text(language, 'jumpPathHint')}</small>
+        </div>
+      ) : null}
 
       <div className={styles.metaGrid}>
         <p className={styles.textRow}>

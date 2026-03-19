@@ -7,9 +7,18 @@ import { Board } from '@/ui/board/Board';
 const NO_SELECTABLE_COORDS: Coord[] = [];
 
 export function BoardStage() {
-  const { board, language, legalTargets, selectedCell, selectableCoords, onSelectCell } = useGameStore(
+  const {
+    board,
+    jumpFollowUpSource,
+    language,
+    legalTargets,
+    selectedCell,
+    selectableCoords,
+    onSelectCell,
+  } = useGameStore(
     useShallow((state) => ({
       board: state.gameState.board,
+      jumpFollowUpSource: state.interaction.type === 'jumpFollowUp' ? state.interaction.source : null,
       language: state.preferences.language,
       legalTargets: state.legalTargets,
       selectedCell: state.selectedCell,
@@ -26,6 +35,7 @@ export function BoardStage() {
   return (
     <Board
       board={board}
+      jumpFollowUpSource={jumpFollowUpSource}
       language={language}
       legalTargets={legalTargets}
       selectedCell={selectedCell}

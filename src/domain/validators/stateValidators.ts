@@ -53,23 +53,13 @@ export function canLandOnOccupiedCell(board: Board, target: Coord): boolean {
   return getCellHeight(board, target) < 3;
 }
 
-/** Checks whether a jump may pass over a middle cell for the moving player. */
-export function canJumpOverCell(board: Board, movingPlayer: Player, target: Coord): boolean {
+/** Checks whether a jump may pass over a middle cell. */
+export function canJumpOverCell(board: Board, target: Coord): boolean {
   if (!isSingleChecker(board, target)) {
     return false;
   }
 
-  const checker = getTopChecker(board, target);
-
-  if (!checker) {
-    return false;
-  }
-
-  if (checker.frozen) {
-    return checker.owner === movingPlayer;
-  }
-
-  return true;
+  return Boolean(getTopChecker(board, target));
 }
 
 /** Enforces board shape invariants that must hold after every legal action. */

@@ -120,7 +120,7 @@ function isCriticalRow(coord: Coord, player: Player): boolean {
 function countDirectionalOpenness(
   state: EngineState,
   coord: Coord,
-  player: Player,
+  _player: Player,
 ): { emptyAdjacency: number; jumpLanes: number } {
   let emptyAdjacency = 0;
   let jumpLanes = 0;
@@ -142,7 +142,7 @@ function countDirectionalOpenness(
     if (
       landing &&
       getCellHeight(state.board, landing) === 0 &&
-      canJumpOverCell(state.board, player, adjacent)
+      canJumpOverCell(state.board, adjacent)
     ) {
       jumpLanes += 1;
     }

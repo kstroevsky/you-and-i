@@ -93,6 +93,7 @@ export function createGameStoreStateRuntime({
       disposeAiWorker: aiController.disposeAiWorker,
       get,
       getBoardDerivation,
+      scheduleAiRevealSync: aiController.scheduleAiRevealSync,
       persistRuntimeSession: persistenceRuntime.persistRuntimeSession,
       resetAiState: aiController.resetAiState,
       set,

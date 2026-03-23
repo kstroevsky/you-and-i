@@ -45,6 +45,7 @@ type StoreTransitionsOptions = {
     gameState: GameStoreState['gameState'],
     ruleConfig: GameStoreState['ruleConfig'],
   ) => BoardDerivation;
+  scheduleAiRevealSync: () => void;
   persistRuntimeSession: (
     session: SerializableSession,
     options?: {
@@ -66,6 +67,7 @@ export function createStoreTransitions({
   disposeAiWorker,
   get,
   getBoardDerivation,
+  scheduleAiRevealSync,
   persistRuntimeSession,
   resetAiState,
   set,
@@ -132,7 +134,15 @@ export function createStoreTransitions({
       lastAiDecision: aiDecision ?? state.lastAiDecision,
     });
     persistCurrentState(nextData);
-    syncComputerTurn();
+    if (
+      aiDecision &&
+      nextGameState.status === 'active' &&
+      isComputerTurn(nextGameState, state.matchSettings)
+    ) {
+      scheduleAiRevealSync();
+    } else {
+      syncComputerTurn();
+    }
 
     if (
       !state.preferences.passDeviceOverlayEnabled &&

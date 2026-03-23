@@ -1,7 +1,7 @@
 import { AI_DIFFICULTY_PRESETS, type AiSearchResult } from '@/ai';
 import type { TurnAction } from '@/domain';
 
-import { AI_WATCHDOG_BUFFER_MS } from '@/app/store/createGameStore/constants';
+import { AI_MOVE_REVEAL_MS, AI_WATCHDOG_BUFFER_MS } from '@/app/store/createGameStore/constants';
 import { isComputerMatch, isComputerTurn } from '@/app/store/createGameStore/match';
 import type {
   AiStatus,
@@ -30,6 +30,7 @@ const AI_COLD_START_BUFFER_MS = 1500;
 export function createAiController({ commitAction, get, options, set }: AiControllerOptions) {
   let aiWorker: AiWorkerLike | null = null;
   let aiWatchdogId: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let aiRevealTimeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
   let aiWorkerIsWarm = false;
   let nextAiRequestId = 1;
 
@@ -42,8 +43,18 @@ export function createAiController({ commitAction, get, options, set }: AiContro
     aiWatchdogId = null;
   }
 
+  function clearAiRevealTimeout(): void {
+    if (aiRevealTimeoutId === null) {
+      return;
+    }
+
+    globalThis.clearTimeout(aiRevealTimeoutId);
+    aiRevealTimeoutId = null;
+  }
+
   function disposeAiWorker(): void {
     clearAiWatchdog();
+    clearAiRevealTimeout();
 
     if (!aiWorker) {
       return;
@@ -100,6 +111,15 @@ export function createAiController({ commitAction, get, options, set }: AiContro
       () => handleAiWatchdogTimeout(requestId),
       timeoutMs,
     );
+  }
+
+  function scheduleAiRevealSync(): void {
+    clearAiRevealTimeout();
+
+    aiRevealTimeoutId = globalThis.setTimeout(() => {
+      aiRevealTimeoutId = null;
+      syncComputerTurn();
+    }, AI_MOVE_REVEAL_MS);
   }
 
   function getAiWorker(): AiWorkerLike | null {
@@ -174,6 +194,8 @@ export function createAiController({ commitAction, get, options, set }: AiContro
   }
 
   function syncComputerTurn(): void {
+    clearAiRevealTimeout();
+
     const state = get();
 
     if (
@@ -228,6 +250,7 @@ export function createAiController({ commitAction, get, options, set }: AiContro
   return {
     disposeAiWorker,
     resetAiState,
+    scheduleAiRevealSync,
     syncComputerTurn,
   };
 }

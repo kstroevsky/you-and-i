@@ -1,4 +1,5 @@
 import type { InferenceSession, Tensor } from 'onnxruntime-web';
+import type * as Ort from 'onnxruntime-web';
 
 import { buildMaskedActionPriors } from '@/ai/model/actionSpace';
 import { encodeStateForModel } from '@/ai/model/encoding';
@@ -11,7 +12,7 @@ const MODEL_PROBE_BYTES = 64;
 const HTML_PREFIXES = ['<!doctype', '<html'];
 
 let modelAssetAvailablePromise: Promise<boolean> | null = null;
-let ortModulePromise: Promise<typeof import('onnxruntime-web')> | null = null;
+let ortModulePromise: Promise<typeof Ort> | null = null;
 let sessionPromise: Promise<InferenceSession | null> | null = null;
 
 function getOutputTensor(
@@ -97,7 +98,7 @@ async function probeModelAsset(): Promise<boolean> {
   return modelAssetAvailablePromise;
 }
 
-async function loadOrtModule(): Promise<typeof import('onnxruntime-web')> {
+async function loadOrtModule(): Promise<typeof Ort> {
   if (!ortModulePromise) {
     ortModulePromise = import('onnxruntime-web');
   }

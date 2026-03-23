@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AI_DIFFICULTY_PRESETS } from '@/ai';
 import { createGameStore } from '@/app/store/createGameStore';
-import { AI_WATCHDOG_BUFFER_MS } from '@/app/store/createGameStore/constants';
+import { AI_MOVE_REVEAL_MS, AI_WATCHDOG_BUFFER_MS } from '@/app/store/createGameStore/constants';
 import { applyAction, createInitialState, getLegalActions, type TurnAction } from '@/domain';
 import type { MatchSettings } from '@/shared/types/session';
 import {
@@ -325,7 +325,9 @@ describe('createGameStore AI integration', () => {
     expect(rewoundStore.getState().historyCursor).toBe(0);
   });
 
-  it('immediately schedules the AI follow-up action after a jump with continuation', async () => {
+  it('waits for the reveal pause before scheduling the AI follow-up action after a jump with continuation', async () => {
+    vi.useFakeTimers();
+
     const worker = new FakeAiWorker();
     const state = gameStateWithBoard(
       boardWithPieces({
@@ -361,12 +363,22 @@ describe('createGameStore AI integration', () => {
       }),
     );
 
+    expect(worker.requests).toHaveLength(1);
+
+    vi.advanceTimersByTime(AI_MOVE_REVEAL_MS - 1);
+
+    expect(worker.requests).toHaveLength(1);
+
+    vi.advanceTimersByTime(1);
+
     expect(worker.requests).toHaveLength(2);
     expect(worker.requests[1]?.state.currentPlayer).toBe('white');
     expect(worker.requests[1]?.state.pendingJump?.source).toBe('C3');
   });
 
   it('keeps scheduling AI jumps while each jump leaves another continuation', async () => {
+    vi.useFakeTimers();
+
     const worker = new FakeAiWorker();
     const state = gameStateWithBoard(
       boardWithPieces({
@@ -404,6 +416,8 @@ describe('createGameStore AI integration', () => {
       }),
     );
 
+    vi.advanceTimersByTime(AI_MOVE_REVEAL_MS);
+
     expect(worker.requests).toHaveLength(2);
     expect(worker.requests[1]?.state.pendingJump?.source).toBe('C3');
 
@@ -416,6 +430,8 @@ describe('createGameStore AI integration', () => {
         },
       }),
     );
+
+    vi.advanceTimersByTime(AI_MOVE_REVEAL_MS);
 
     expect(worker.requests).toHaveLength(3);
     expect(worker.requests[2]?.state.currentPlayer).toBe('white');

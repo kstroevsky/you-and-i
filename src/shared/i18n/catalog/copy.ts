@@ -18,7 +18,7 @@ export const INTERACTION_COPY: Record<Language, InteractionCopy> = {
     idle: 'Select a checker or controlled stack.',
     pieceSelected: (source) => `Selected ${source}. Choose a move type.`,
     jumpFollowUp: (source) =>
-      `Jump from ${source} keeps the turn. Continue jumping there or choose any legal move.`,
+      `Jump chain ready at ${source}. Keep jumping there or choose any legal move.`,
     choosingTarget: (action, source) => `Choose a target for ${action} from ${source}.`,
     buildingJumpChain: (source) =>
       `Choose the next jump landing from ${source}. Each click applies one segment immediately.`,
@@ -30,7 +30,7 @@ export const INTERACTION_COPY: Record<Language, InteractionCopy> = {
     idle: 'Выберите шашку или контролируемую горку.',
     pieceSelected: (source) => `Выбрана ${source}. Теперь выберите тип хода.`,
     jumpFollowUp: (source) =>
-      `Прыжок из ${source} сохраняет ход. Продолжайте прыжок им или выберите любой допустимый ход.`,
+      `Цепочка прыжков готова из ${source}. Продолжайте прыгать ею или выберите любой допустимый ход.`,
     choosingTarget: (action, source) => `Выберите цель для «${action}» из ${source}.`,
     buildingJumpChain: (source) =>
       `Выберите следующую цель прыжка из ${source}. Каждый клик применяет один участок сразу.`,

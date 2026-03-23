@@ -85,6 +85,20 @@ export type Victory =
   | { type: 'none' }
   | { type: 'homeField'; winner: Player }
   | { type: 'sixStacks'; winner: Player }
+  | {
+      type: 'threefoldTiebreakWin';
+      winner: Player;
+      ownFieldCheckers: Record<Player, number>;
+      completedHomeStacks: Record<Player, number>;
+      decidedBy: 'checkers' | 'stacks';
+    }
+  | {
+      type: 'stalemateTiebreakWin';
+      winner: Player;
+      ownFieldCheckers: Record<Player, number>;
+      completedHomeStacks: Record<Player, number>;
+      decidedBy: 'checkers' | 'stacks';
+    }
   | { type: 'threefoldDraw' }
   | { type: 'stalemateDraw' };
 

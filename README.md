@@ -33,8 +33,14 @@ The rules revolve around six concepts:
 Optional rules are modelled explicitly rather than hidden in the UI:
 
 - non-adjacent friendly stack transfer;
-- threefold repetition draw;
+- threefold repetition trigger (when enabled), with draw-resolution tiebreak;
 - informational score mode.
+
+Draw resolution used by both threefold and stalemate outcomes:
+
+- compare own checkers on own home field;
+- if tied, compare completed own height-3 stacks on own home field;
+- if still tied, keep draw.
 
 ## System Overview
 

@@ -18,7 +18,7 @@ export function evaluateStructureState(
   _ruleConfig: RuleConfig,
 ): number {
   if (state.status === 'gameOver') {
-    if (state.victory.type === 'homeField' || state.victory.type === 'sixStacks') {
+    if ('winner' in state.victory) {
       return state.victory.winner === perspectivePlayer ? TERMINAL_SCORE : -TERMINAL_SCORE;
     }
 
@@ -42,7 +42,7 @@ export function evaluateState(
   preset: AiDifficultyPreset | null = null,
 ): number {
   if (state.status === 'gameOver') {
-    if (state.victory.type === 'homeField' || state.victory.type === 'sixStacks') {
+    if ('winner' in state.victory) {
       return state.victory.winner === perspectivePlayer ? TERMINAL_SCORE : -TERMINAL_SCORE;
     }
 

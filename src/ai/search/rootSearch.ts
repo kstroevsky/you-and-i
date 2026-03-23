@@ -207,8 +207,7 @@ export function chooseComputerAction({
     for (const entry of rootOrderedMoves) {
       if (
         entry.nextState.status === 'gameOver' &&
-        (entry.nextState.victory.type === 'homeField' ||
-          entry.nextState.victory.type === 'sixStacks') &&
+        'winner' in entry.nextState.victory &&
         entry.nextState.victory.winner === state.currentPlayer
       ) {
         return {

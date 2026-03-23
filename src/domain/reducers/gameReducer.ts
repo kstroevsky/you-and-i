@@ -3,7 +3,7 @@ import { hashPosition } from '@/domain/model/hash';
 import { withRuleDefaults } from '@/domain/model/ruleConfig';
 import type { EngineState, GameState, Player, RuleConfig, TurnAction } from '@/domain/model/types';
 import { applyValidatedAction, getLegalActions, validateAction } from '@/domain/rules/moveGeneration';
-import { checkVictory } from '@/domain/rules/victory';
+import { checkVictory, resolveDrawOutcome } from '@/domain/rules/victory';
 
 type EngineAdvanceResult = {
   autoPasses: Player[];
@@ -98,13 +98,13 @@ function advanceEngineStateInternal(
     const retryPlayer = actor;
 
     if (getLegalActionCount(immediateState, retryPlayer, resolvedConfig) === 0) {
-      // Neither side can move: stalemate draw.
+      // Neither side can move: resolve stalemate using draw tiebreak rules.
       autoPasses.push(retryPlayer);
       finalState = {
         ...immediateState,
         currentPlayer: actor,
         status: 'gameOver',
-        victory: { type: 'stalemateDraw' },
+        victory: resolveDrawOutcome(immediateState, 'stalemate'),
         pendingJump: null,
       };
     } else {

@@ -283,7 +283,7 @@ flowchart TD
   C --> D["Switch turn unless jump continuation exists"]
   D --> E["Check immediate win"]
   E --> F{"Next player has legal action?"}
-  F -- "No" --> G["Auto-pass or stalemate draw"]
+  F -- "No" --> G["Auto-pass or stalemate tiebreak resolution"]
   F -- "Yes" --> H["Hash final position"]
   G --> H
   H --> I["Update repetition counts"]
@@ -313,7 +313,9 @@ It checks:
 
 - `homeField`: every checker owned by a player is a single on that player's home rows;
 - `sixStacks`: all six front-row home cells contain height-3 stacks made entirely of that player's checkers;
-- `threefoldDraw`: only when enabled in config, and only when the full position hash has occurred at least three times.
+- `threefold` terminal trigger: only when enabled in config, and only when the full position hash has occurred at least three times;
+- draw-resolution tiebreak for both threefold and stalemate triggers:
+  compare own home-field checker counts, then completed own home stacks, then keep draw on full equality.
 
 Important nuance: six-stack victory requires full ownership of the stack, not just top control.
 
@@ -411,7 +413,7 @@ They describe the intended behavior of:
 
 - jump freezing and unfreezing;
 - same-turn jump continuation;
-- auto-pass and stalemate behavior;
+- auto-pass and stalemate tiebreak behavior;
 - serialization migration and normalization;
 - helper/hash stability assumptions used by performance-sensitive code.
 

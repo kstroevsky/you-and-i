@@ -45,6 +45,22 @@ export type VictoryCopy = {
   none: string;
   homeField: (winner: string) => string;
   sixStacks: (winner: string) => string;
+  threefoldTiebreakWin: (
+    winner: string,
+    ownFieldWhite: number,
+    ownFieldBlack: number,
+    stacksWhite: number,
+    stacksBlack: number,
+    decidedBy: 'checkers' | 'stacks',
+  ) => string;
+  stalemateTiebreakWin: (
+    winner: string,
+    ownFieldWhite: number,
+    ownFieldBlack: number,
+    stacksWhite: number,
+    stacksBlack: number,
+    decidedBy: 'checkers' | 'stacks',
+  ) => string;
   threefoldDraw: string;
   stalemateDraw: string;
 };
@@ -54,6 +70,24 @@ export const VICTORY_COPY: Record<Language, VictoryCopy> = {
     none: TEXT.english.gameActive,
     homeField: (winner) => `${winner} win by home field`,
     sixStacks: (winner) => `${winner} win by six stacks`,
+    threefoldTiebreakWin: (
+      winner,
+      ownFieldWhite,
+      ownFieldBlack,
+      stacksWhite,
+      stacksBlack,
+      decidedBy,
+    ) =>
+      `${winner} win after threefold tiebreak (${decidedBy === 'checkers' ? 'decided by own-field checkers' : 'decided by completed home stacks'}). Own-field checkers: White ${ownFieldWhite}, Black ${ownFieldBlack}. Completed home stacks: White ${stacksWhite}, Black ${stacksBlack}.`,
+    stalemateTiebreakWin: (
+      winner,
+      ownFieldWhite,
+      ownFieldBlack,
+      stacksWhite,
+      stacksBlack,
+      decidedBy,
+    ) =>
+      `${winner} win after stalemate tiebreak (${decidedBy === 'checkers' ? 'decided by own-field checkers' : 'decided by completed home stacks'}). Own-field checkers: White ${ownFieldWhite}, Black ${ownFieldBlack}. Completed home stacks: White ${stacksWhite}, Black ${stacksBlack}.`,
     threefoldDraw: 'Draw by threefold repetition',
     stalemateDraw: 'Draw by stalemate',
   },
@@ -61,6 +95,24 @@ export const VICTORY_COPY: Record<Language, VictoryCopy> = {
     none: TEXT.russian.gameActive,
     homeField: (winner) => `${winner} победили через своё поле`,
     sixStacks: (winner) => `${winner} победили шестью горками`,
+    threefoldTiebreakWin: (
+      winner,
+      ownFieldWhite,
+      ownFieldBlack,
+      stacksWhite,
+      stacksBlack,
+      decidedBy,
+    ) =>
+      `${winner} победили по тай-брейку после трёхкратного повторения (${decidedBy === 'checkers' ? 'решение по шашкам на своём поле' : 'решение по завершённым домашним горкам'}). Шашки на своём поле: белые ${ownFieldWhite}, чёрные ${ownFieldBlack}. Завершённые домашние горки: белые ${stacksWhite}, чёрные ${stacksBlack}.`,
+    stalemateTiebreakWin: (
+      winner,
+      ownFieldWhite,
+      ownFieldBlack,
+      stacksWhite,
+      stacksBlack,
+      decidedBy,
+    ) =>
+      `${winner} победили по тай-брейку при блокировке (${decidedBy === 'checkers' ? 'решение по шашкам на своём поле' : 'решение по завершённым домашним горкам'}). Шашки на своём поле: белые ${ownFieldWhite}, чёрные ${ownFieldBlack}. Завершённые домашние горки: белые ${stacksWhite}, чёрные ${stacksBlack}.`,
     threefoldDraw: 'Ничья по трёхкратному повторению',
     stalemateDraw: 'Ничья по блокировке',
   },

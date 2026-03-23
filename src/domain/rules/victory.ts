@@ -15,6 +15,8 @@ const FRONT_HOME_COORDS: Record<Player, Coord[]> = {
   black: BOARD_COLUMNS.map((column) => createCoord(column as Column, FRONT_HOME_ROW.black)),
 };
 
+type DrawSource = 'threefold' | 'stalemate';
+
 /** True when all 18 player checkers are singles inside that player's home rows. */
 function hasHomeFieldWin(state: EngineState, player: Player): boolean {
   if (countCheckersForPlayer(state.board, player) !== 18) {
@@ -40,6 +42,93 @@ function hasSixStackWin(state: EngineState, player: Player): boolean {
   );
 }
 
+function countOwnFieldCheckers(state: EngineState, player: Player): number {
+  return allCoords().reduce((count, coord) => {
+    const { row } = parseCoord(coord);
+
+    if (!HOME_ROWS[player].has(row)) {
+      return count;
+    }
+
+    return (
+      count +
+      state.board[coord].checkers.filter((checker) => checker.owner === player).length
+    );
+  }, 0);
+}
+
+function countCompletedHomeStacks(state: EngineState, player: Player): number {
+  return allCoords().reduce((count, coord) => {
+    const { row } = parseCoord(coord);
+
+    if (!HOME_ROWS[player].has(row)) {
+      return count;
+    }
+
+    return count + (isFullStackOwnedByPlayer(state.board, coord, player) ? 1 : 0);
+  }, 0);
+}
+
+export function getDrawTiebreakMetrics(state: EngineState): {
+  completedHomeStacks: Record<Player, number>;
+  ownFieldCheckers: Record<Player, number>;
+} {
+  return {
+    ownFieldCheckers: {
+      white: countOwnFieldCheckers(state, 'white'),
+      black: countOwnFieldCheckers(state, 'black'),
+    },
+    completedHomeStacks: {
+      white: countCompletedHomeStacks(state, 'white'),
+      black: countCompletedHomeStacks(state, 'black'),
+    },
+  };
+}
+
+function createTiebreakWin(
+  source: DrawSource,
+  winner: Player,
+  metrics: ReturnType<typeof getDrawTiebreakMetrics>,
+  decidedBy: 'checkers' | 'stacks',
+): Victory {
+  return {
+    type: source === 'threefold' ? 'threefoldTiebreakWin' : 'stalemateTiebreakWin',
+    winner,
+    ownFieldCheckers: { ...metrics.ownFieldCheckers },
+    completedHomeStacks: { ...metrics.completedHomeStacks },
+    decidedBy,
+  };
+}
+
+export function resolveDrawOutcome(state: EngineState, source: DrawSource): Victory {
+  const metrics = getDrawTiebreakMetrics(state);
+  const whiteCheckers = metrics.ownFieldCheckers.white;
+  const blackCheckers = metrics.ownFieldCheckers.black;
+
+  if (whiteCheckers !== blackCheckers) {
+    return createTiebreakWin(
+      source,
+      whiteCheckers > blackCheckers ? 'white' : 'black',
+      metrics,
+      'checkers',
+    );
+  }
+
+  const whiteStacks = metrics.completedHomeStacks.white;
+  const blackStacks = metrics.completedHomeStacks.black;
+
+  if (whiteStacks !== blackStacks) {
+    return createTiebreakWin(
+      source,
+      whiteStacks > blackStacks ? 'white' : 'black',
+      metrics,
+      'stacks',
+    );
+  }
+
+  return { type: source === 'threefold' ? 'threefoldDraw' : 'stalemateDraw' };
+}
+
 /** Evaluates deterministic terminal status for current state under provided rules. */
 export function checkVictory(
   state: EngineState,
@@ -61,7 +150,7 @@ export function checkVictory(
     const positionHash = hashPosition(state);
 
     if ((state.positionCounts[positionHash] ?? 0) >= 3) {
-      return { type: 'threefoldDraw' };
+      return resolveDrawOutcome(state, 'threefold');
     }
   }
 

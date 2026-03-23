@@ -235,6 +235,10 @@ function normalizeVictory(victory: Victory): AiTerminalType {
       return 'homeField';
     case 'sixStacks':
       return 'sixStacks';
+    case 'threefoldTiebreakWin':
+      return 'threefoldDraw';
+    case 'stalemateTiebreakWin':
+      return 'stalemateDraw';
     case 'threefoldDraw':
       return 'threefoldDraw';
     case 'stalemateDraw':
@@ -677,9 +681,7 @@ function computeBehaviorSpaceCoverage(traces: AiGameTrace[]): number {
 }
 
 function computeGameRefinement(traces: AiGameTrace[]): number {
-  const decisive = traces.filter(
-    (trace) => trace.terminalType === 'homeField' || trace.terminalType === 'sixStacks',
-  );
+  const decisive = traces.filter((trace) => 'winner' in trace.finalVictory);
 
   if (!decisive.length) {
     return 0;
@@ -1089,7 +1091,7 @@ export function summarizeAiVariety(
         (firstMoveSourceFamilyDistribution[trace.plies[0].sourceFamily] ?? 0) + 1;
     }
 
-    if (trace.terminalType === 'homeField' || trace.terminalType === 'sixStacks') {
+    if ('winner' in trace.finalVictory) {
       decisiveCount += 1;
     }
 

@@ -28,6 +28,20 @@ export function assertPlayer(value: unknown, label: string): Player {
   return value;
 }
 
+function assertPlayerCountRecord(
+  value: unknown,
+  label: string,
+): Record<Player, number> {
+  if (!isRecord(value) || typeof value.white !== 'number' || typeof value.black !== 'number') {
+    throw new Error(`Invalid ${label}.`);
+  }
+
+  return {
+    white: value.white,
+    black: value.black,
+  };
+}
+
 /** Runtime guard that validates coordinate values against board coordinates. */
 export function assertCoord(value: unknown, label: string): Coord {
   if (typeof value !== 'string' || !COORD_SET.has(value as Coord)) {
@@ -66,6 +80,26 @@ export function assertVictory(value: unknown): Victory {
     case 'threefoldDraw':
     case 'stalemateDraw':
       return { type: value.type };
+    case 'threefoldTiebreakWin':
+    case 'stalemateTiebreakWin': {
+      if (value.decidedBy !== 'checkers' && value.decidedBy !== 'stacks') {
+        throw new Error('Invalid victory decidedBy.');
+      }
+
+      return {
+        type: value.type,
+        winner: assertPlayer(value.winner, 'victory winner'),
+        ownFieldCheckers: assertPlayerCountRecord(
+          value.ownFieldCheckers,
+          'victory ownFieldCheckers',
+        ),
+        completedHomeStacks: assertPlayerCountRecord(
+          value.completedHomeStacks,
+          'victory completedHomeStacks',
+        ),
+        decidedBy: value.decidedBy,
+      };
+    }
     case 'homeField':
     case 'sixStacks':
       return {

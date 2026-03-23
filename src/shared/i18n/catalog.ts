@@ -55,6 +55,8 @@ export function formatGameResultTitle(language: Language, victory: Victory): str
   switch (victory.type) {
     case 'homeField':
     case 'sixStacks':
+    case 'threefoldTiebreakWin':
+    case 'stalemateTiebreakWin':
       return copy.winner(playerLabel(language, victory.winner));
     case 'threefoldDraw':
     case 'stalemateDraw':
@@ -115,6 +117,24 @@ export function formatVictory(language: Language, victory: Victory): string {
       return copy.homeField(playerLabel(language, victory.winner));
     case 'sixStacks':
       return copy.sixStacks(playerLabel(language, victory.winner));
+    case 'threefoldTiebreakWin':
+      return copy.threefoldTiebreakWin(
+        playerLabel(language, victory.winner),
+        victory.ownFieldCheckers.white,
+        victory.ownFieldCheckers.black,
+        victory.completedHomeStacks.white,
+        victory.completedHomeStacks.black,
+        victory.decidedBy,
+      );
+    case 'stalemateTiebreakWin':
+      return copy.stalemateTiebreakWin(
+        playerLabel(language, victory.winner),
+        victory.ownFieldCheckers.white,
+        victory.ownFieldCheckers.black,
+        victory.completedHomeStacks.white,
+        victory.completedHomeStacks.black,
+        victory.decidedBy,
+      );
     case 'threefoldDraw':
       return copy.threefoldDraw;
     case 'stalemateDraw':

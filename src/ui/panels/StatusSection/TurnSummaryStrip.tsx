@@ -33,6 +33,7 @@ export function getVictoryTermId(victory: Victory): GlossaryTermId | null {
       return 'homeFieldVictory';
     case 'sixStacks':
       return 'sixStacksVictory';
+    case 'threefoldTiebreakWin':
     case 'threefoldDraw':
       return 'threefoldDraw';
     default:

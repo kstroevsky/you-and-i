@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useId, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useGameStore } from '@/app/providers/GameStoreProvider';
+import type { Victory } from '@/domain';
 import { formatGameResultTitle, formatVictory, text } from '@/shared/i18n/catalog';
 import { Button } from '@/ui/primitives/Button';
 
@@ -10,12 +11,7 @@ import styles from './style.module.scss';
 function getResultToken(
   status: 'active' | 'gameOver',
   historyCursor: number,
-  victory:
-    | { type: 'none' }
-    | { type: 'homeField'; winner: 'white' | 'black' }
-    | { type: 'sixStacks'; winner: 'white' | 'black' }
-    | { type: 'threefoldDraw' }
-    | { type: 'stalemateDraw' },
+  victory: Victory,
 ): string | null {
   if (status !== 'gameOver') {
     return null;

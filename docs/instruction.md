@@ -414,17 +414,22 @@ The following are illegal:
 
 ## 21. Draws and scoring
 
-At this stage, the core rules of the game are clear enough to play, but **draw rules** and a fully standardized **point-scoring system** are not yet finalized.
+Draw outcomes are resolved with a deterministic tiebreak.
 
-So the canonical core rulebook is:
+Draw triggers:
 
-* **official core play**: movement, stacks, freezing, victory
-* **not yet standardized**: draw handling and points
+* **threefold repetition** of the same full position with the same side to move (if the threefold rule is enabled)
+* **stalemate/pat** when both players have no legal action after auto-pass handling
 
-Recommended optional draw rule for practical play:
+Resolution order for both draw triggers:
 
-* draw by **threefold repetition** of the same full game position
+1. Compare how many **own checkers are on own home field**:
+   * white counts white checkers on rows 4-6
+   * black counts black checkers on rows 1-3
+   * all own checkers count, including own checkers inside mixed/blocked stacks
+2. If equal, compare how many **completed own home stacks** each player has:
+   * completed stack = height 3 stack containing only that player's checkers
+   * count only stacks on that player's own home field
+3. If still equal, the result stays a draw.
 
-Recommended optional score mode:
-
-* keep it as a separate variant, not part of the core engine
+Score mode remains optional and informational.

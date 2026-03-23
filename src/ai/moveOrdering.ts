@@ -279,7 +279,7 @@ export function orderMoves(
     const nextPositionKey = hashPosition(nextState);
     const winsImmediately =
       nextState.status === 'gameOver' &&
-      (nextState.victory.type === 'homeField' || nextState.victory.type === 'sixStacks') &&
+      'winner' in nextState.victory &&
       nextState.victory.winner === actor;
     const repeatedPositionCount = getRepeatedPositionCount(nextState);
     const frontRowGrowth = growsFrontRowStack(state, action, nextState, actor);

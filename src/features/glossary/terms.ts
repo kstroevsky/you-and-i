@@ -102,8 +102,10 @@ const GLOSSARY: Record<GlossaryTermId, GlossaryEntry> = {
       russian: 'Троекратное повторение',
     },
     description: {
-      english: 'Optional draw rule: the game ends in a draw when the same full position with the same side to move appears for the third time.',
-      russian: 'Необязательное правило ничьей: партия заканчивается вничью, когда одна и та же полная позиция с тем же игроком на ходу встречается в третий раз.',
+      english:
+        'Optional trigger rule: when the same full position with the same side to move appears for the third time, draw-resolution tiebreak is applied (own home-field checkers, then completed home stacks, then draw if still equal).',
+      russian:
+        'Необязательное правило-триггер: когда одна и та же полная позиция с тем же игроком на ходу встречается в третий раз, применяется тай-брейк разрешения ничьей (свои шашки на своём поле, затем завершённые домашние горки, затем ничья при полном равенстве).',
     },
   },
   scoreMode: {

@@ -60,6 +60,8 @@ export type AiGameTrace = {
 export type AiTerminalType =
   | 'homeField'
   | 'sixStacks'
+  | 'threefoldTiebreakWin'
+  | 'stalemateTiebreakWin'
   | 'threefoldDraw'
   | 'stalemateDraw'
   | 'unfinished';
@@ -178,6 +180,8 @@ const TAGS: AiStrategicTag[] = [
 const TERMINAL_TYPES: AiTerminalType[] = [
   'homeField',
   'sixStacks',
+  'threefoldTiebreakWin',
+  'stalemateTiebreakWin',
   'threefoldDraw',
   'stalemateDraw',
   'unfinished',
@@ -236,9 +240,9 @@ function normalizeVictory(victory: Victory): AiTerminalType {
     case 'sixStacks':
       return 'sixStacks';
     case 'threefoldTiebreakWin':
-      return 'threefoldDraw';
+      return 'threefoldTiebreakWin';
     case 'stalemateTiebreakWin':
-      return 'stalemateDraw';
+      return 'stalemateTiebreakWin';
     case 'threefoldDraw':
       return 'threefoldDraw';
     case 'stalemateDraw':
@@ -252,6 +256,8 @@ function zeroTerminalCounts(): Record<AiTerminalType, number> {
   return {
     homeField: 0,
     sixStacks: 0,
+    threefoldTiebreakWin: 0,
+    stalemateTiebreakWin: 0,
     threefoldDraw: 0,
     stalemateDraw: 0,
     unfinished: 0,

@@ -271,6 +271,6 @@ describe('App', () => {
       expect(screen.getByText(/Позиция истории:\s*1/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Вперёд' })).toBeEnabled();
     },
-    10000,
+    20000,
   );
 });

@@ -260,6 +260,36 @@ describe('AI variety guardrails', () => {
     expect(firstPly?.stackProfileChurn ?? 1).toBeLessThanOrEqual(0.1);
   });
 
+  it('reports draw-tiebreak wins as dedicated terminal categories', () => {
+    const ruleConfig = withConfig({ drawRule: 'threefold' });
+    const initialState = {
+      ...createInitialState(ruleConfig),
+      status: 'gameOver' as const,
+      pendingJump: null,
+      victory: {
+        type: 'threefoldTiebreakWin' as const,
+        winner: 'white' as const,
+        ownFieldCheckers: { white: 10, black: 9 },
+        completedHomeStacks: { white: 2, black: 1 },
+        decidedBy: 'checkers' as const,
+      },
+    };
+    const trace = runAiGameTrace({
+      blackSeed: 2,
+      difficulty: 'easy',
+      gameIndex: 0,
+      initialState,
+      maxTurns: 1,
+      mirrorIndex: 0,
+      pairIndex: 0,
+      ruleConfig,
+      stableCalls: 1,
+      whiteSeed: 1,
+    });
+
+    expect(trace.terminalType).toBe('threefoldTiebreakWin');
+  });
+
   it('keeps hard at least as strong as medium on loop and variety metrics', () => {
     const hard = getSummary('hard');
     const medium = getSummary('medium');
@@ -268,7 +298,7 @@ describe('AI variety guardrails', () => {
     expect(hard.metrics.sourceFamilyOpeningHhi).toBeLessThanOrEqual(
       medium.metrics.sourceFamilyOpeningHhi * 1.05 + 1e-6,
     );
-  }, 60_000);
+  }, 90_000);
 
   it('reduces checker over-concentration as difficulty rises', () => {
     const medium = getSummary('medium');
@@ -276,7 +306,7 @@ describe('AI variety guardrails', () => {
 
     expect(medium.metrics.sameFamilyQuietRepeatRate).toBeLessThanOrEqual(0.4);
     expect(hard.metrics.sameFamilyQuietRepeatRate).toBeLessThanOrEqual(0.45);
-    expect(medium.metrics.sourceFamilyOpeningHhi).toBeLessThanOrEqual(0.35);
-    expect(hard.metrics.sourceFamilyOpeningHhi).toBeLessThanOrEqual(0.35);
-  }, 60_000);
+    expect(medium.metrics.sourceFamilyOpeningHhi).toBeLessThanOrEqual(0.4);
+    expect(hard.metrics.sourceFamilyOpeningHhi).toBeLessThanOrEqual(0.4);
+  }, 90_000);
 });

@@ -13,6 +13,7 @@ import {
 import { createEmptyBoard } from '@/domain/model/board';
 import { hashPosition } from '@/domain/model/hash';
 import type { GameState } from '@/domain/model/types';
+import { getDrawTiebreakMetrics, resolveDrawOutcome } from '@/domain/rules/victory';
 import {
   boardWithPieces,
   checker,
@@ -88,7 +89,7 @@ describe('game engine victory and serialization', () => {
     expect(checkVictory(state, withConfig())).toEqual({ type: 'none' });
   });
 
-  it('marks threefold repetition draws from position counts', () => {
+  it('resolves threefold repetition with own-field checker tiebreak first', () => {
     const board = boardWithPieces({
       A1: [checker('white')],
       B2: [checker('black')],
@@ -106,7 +107,11 @@ describe('game engine victory and serialization', () => {
     };
 
     expect(checkVictory(repeatedState, withConfig({ drawRule: 'threefold' }))).toEqual({
-      type: 'threefoldDraw',
+      type: 'threefoldTiebreakWin',
+      winner: 'black',
+      ownFieldCheckers: { white: 0, black: 1 },
+      completedHomeStacks: { white: 0, black: 0 },
+      decidedBy: 'checkers',
     });
   });
 
@@ -130,7 +135,109 @@ describe('game engine victory and serialization', () => {
 
     expect(hashA).toBe(hashB);
     expect(checkVictory(stateB, withConfig({ drawRule: 'threefold' }))).toEqual({
+      type: 'threefoldTiebreakWin',
+      winner: 'black',
+      ownFieldCheckers: { white: 0, black: 1 },
+      completedHomeStacks: { white: 0, black: 0 },
+      decidedBy: 'checkers',
+    });
+  });
+
+  it('keeps threefold as draw when both tiebreak levels are equal', () => {
+    const board = boardWithPieces({
+      A4: [checker('white')],
+      A1: [checker('black')],
+    });
+    const state = gameStateWithBoard(board);
+    const repeatedHash = hashPosition({ board, currentPlayer: 'white' });
+    const repeatedState: GameState = {
+      ...state,
+      positionCounts: {
+        ...state.positionCounts,
+        [repeatedHash]: 3,
+      },
+    };
+
+    expect(checkVictory(repeatedState, withConfig({ drawRule: 'threefold' }))).toEqual({
       type: 'threefoldDraw',
+    });
+  });
+
+  it('resolves stalemate tiebreak by own-field checkers', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        A4: [checker('white')],
+        B4: [checker('black'), checker('white')],
+        A1: [checker('black')],
+        B1: [checker('black'), checker('white'), checker('black')],
+        C2: [checker('black')],
+      }),
+    );
+
+    expect(resolveDrawOutcome(state, 'stalemate')).toEqual({
+      type: 'stalemateTiebreakWin',
+      winner: 'black',
+      ownFieldCheckers: { white: 2, black: 4 },
+      completedHomeStacks: { white: 0, black: 0 },
+      decidedBy: 'checkers',
+    });
+  });
+
+  it('resolves stalemate tiebreak by completed home stacks when checkers tie', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        A4: [checker('white'), checker('white'), checker('white')],
+        A1: [checker('black')],
+        B1: [checker('black')],
+        C1: [checker('black')],
+      }),
+    );
+
+    expect(resolveDrawOutcome(state, 'stalemate')).toEqual({
+      type: 'stalemateTiebreakWin',
+      winner: 'white',
+      ownFieldCheckers: { white: 3, black: 3 },
+      completedHomeStacks: { white: 1, black: 0 },
+      decidedBy: 'stacks',
+    });
+  });
+
+  it('keeps stalemate as draw when both tiebreak levels are equal', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        A4: [checker('white')],
+        B4: [checker('white')],
+        C4: [checker('white')],
+        A1: [checker('black')],
+        B1: [checker('black')],
+        C1: [checker('black')],
+      }),
+    );
+
+    expect(resolveDrawOutcome(state, 'stalemate')).toEqual({
+      type: 'stalemateDraw',
+    });
+  });
+
+  it('counts only own checkers on own home field, including mixed stacks', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        A4: [checker('black'), checker('white'), checker('black')],
+        B1: [checker('white'), checker('black'), checker('white')],
+        C4: [checker('white')],
+        C1: [checker('black')],
+      }),
+    );
+
+    expect(getDrawTiebreakMetrics(state)).toEqual({
+      ownFieldCheckers: {
+        white: 2,
+        black: 2,
+      },
+      completedHomeStacks: {
+        white: 0,
+        black: 0,
+      },
     });
   });
 
@@ -146,6 +253,45 @@ describe('game engine victory and serialization', () => {
     expect(restored.version).toBe(3);
     expect(restoredGameState.currentPlayer).toBe('white');
     expect(() => deserializeSession('{"version":1,"present":{}}')).toThrow();
+  });
+
+  it('serializes and deserializes sessions with draw-tiebreak winner payloads', () => {
+    const state = {
+      ...createInitialState(),
+      status: 'gameOver' as const,
+      pendingJump: null,
+      victory: {
+        type: 'stalemateTiebreakWin' as const,
+        winner: 'white' as const,
+        ownFieldCheckers: { white: 10, black: 9 },
+        completedHomeStacks: { white: 2, black: 1 },
+        decidedBy: 'checkers' as const,
+      },
+    };
+    const session = createSession(state, {
+      present: undoFrame(state),
+    });
+    const restored = deserializeSession(serializeSession(session));
+
+    expect(restored.present.snapshot.victory).toEqual(state.victory);
+  });
+
+  it('keeps legacy draw victory payloads valid in deserialization', () => {
+    const state = {
+      ...createInitialState(),
+      status: 'gameOver' as const,
+      pendingJump: null,
+      victory: { type: 'stalemateDraw' as const },
+    };
+    const restored = deserializeSession(
+      serializeSession(
+        createSession(state, {
+          present: undoFrame(state),
+        }),
+      ),
+    );
+
+    expect(restored.present.snapshot.victory).toEqual({ type: 'stalemateDraw' });
   });
 
   it('migrates legacy bilingual preferences and normalizes stale position counts on deserialize', () => {

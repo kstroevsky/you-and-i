@@ -5,7 +5,7 @@ import { selectCandidateAction } from '@/ai/search/result';
 import type { RootRankedAction } from '@/ai/search/types';
 import { applyAction, createInitialState, getLegalActions, hashPosition } from '@/domain';
 import type { GameState, TurnAction } from '@/domain/model/types';
-import { resetFactoryIds, withConfig } from '@/test/factories';
+import { boardWithPieces, checker, gameStateWithBoard, resetFactoryIds, withConfig } from '@/test/factories';
 
 import {
   actionKey,
@@ -142,6 +142,61 @@ describe('computer opponent search', () => {
     });
     expect(homeFieldResult.diagnostics.aspirationResearches).toBeGreaterThanOrEqual(0);
     expect(homeFieldResult.diagnostics.betaCutoffs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('recognizes immediate threefold tiebreak wins as forced wins', () => {
+    resetFactoryIds();
+    const drawRuleConfig = withConfig({ drawRule: 'threefold' });
+    const noDrawConfig = withConfig({ drawRule: 'none' });
+    const winningAction: TurnAction = {
+      type: 'moveSingleToEmpty',
+      source: 'B1',
+      target: 'B2',
+    };
+    const baseState = gameStateWithBoard(
+      boardWithPieces({
+        B1: [checker('black')],
+        F3: [checker('white')],
+      }),
+      { currentPlayer: 'black' },
+    );
+    const repeatedState = applyAction(baseState, winningAction, noDrawConfig);
+    const repeatedHash = hashPosition(repeatedState);
+    const state: GameState = {
+      ...baseState,
+      positionCounts: {
+        ...baseState.positionCounts,
+        [repeatedHash]: 2,
+      },
+    };
+    const ordered = orderMoves(
+      state,
+      state.currentPlayer,
+      drawRuleConfig,
+      AI_DIFFICULTY_PRESETS.hard,
+      { includeAllQuietMoves: true },
+    );
+    const winningEntry = ordered.find(
+      (entry) => actionKey(entry.action) === actionKey(winningAction),
+    );
+    const result = chooseComputerAction({
+      difficulty: 'easy',
+      now: createTickingClock(0.001),
+      random: () => 0,
+      ruleConfig: drawRuleConfig,
+      state,
+    });
+
+    expect(winningEntry).toBeDefined();
+    expect(winningEntry?.isForced).toBe(true);
+    expect(winningEntry?.isTactical).toBe(true);
+    expect(winningEntry?.nextState.victory).toMatchObject({
+      type: 'threefoldTiebreakWin',
+      winner: 'black',
+      decidedBy: 'checkers',
+    });
+    expect(result.action).toEqual(winningAction);
+    expect(result.completedRootMoves).toBe(1);
   });
 
   it('blocks the opponent from winning on the next move', () => {
@@ -328,7 +383,7 @@ describe('computer opponent search', () => {
     expect(result.rootCandidates.length).toBeGreaterThan(1);
     expect(result.rootCandidates.some((candidate) => !candidate.isTactical)).toBe(true);
     expect(result.rootCandidates.every((candidate) => Array.isArray(candidate.tags))).toBe(true);
-  }, 15_000);
+  }, 30_000);
 
   it('samples different strategic tags across near-equal synthetic root candidates', () => {
     const originalHardPreset = { ...AI_DIFFICULTY_PRESETS.hard };

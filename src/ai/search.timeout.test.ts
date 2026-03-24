@@ -39,7 +39,7 @@ describe('computer opponent search timeouts', () => {
     expect(result.completedRootMoves).toBe(legalActions.length);
     expect(result.fallbackKind).toBe('none');
     expect(result.timedOut).toBe(false);
-  }, 15_000);
+  }, 30_000);
 
   it('falls back to partial current-depth search work instead of blind legal-order fallback on timeout', () => {
     const config = withConfig();

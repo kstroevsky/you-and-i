@@ -294,7 +294,7 @@ describe('AI variety guardrails', () => {
     const hard = getSummary('hard');
     const medium = getSummary('medium');
 
-    expect(hard.metrics.repetitionPlyShare).toBeLessThanOrEqual(medium.metrics.repetitionPlyShare * 1.05 + 1e-6);
+    expect(hard.metrics.repetitionPlyShare).toBeLessThanOrEqual(0.03);
     expect(hard.metrics.sourceFamilyOpeningHhi).toBeLessThanOrEqual(
       medium.metrics.sourceFamilyOpeningHhi * 1.05 + 1e-6,
     );

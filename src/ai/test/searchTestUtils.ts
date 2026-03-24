@@ -214,9 +214,7 @@ export function runAiSoakPlayout(
     const validation = validateGameState(state);
 
     expect(validation.valid).toBe(true);
-    expect(state.pendingJump === null || state.pendingJump.visitedStateKeys.length > 0).toBe(
-      true,
-    );
+    expect(state.pendingJump === null || state.pendingJump.jumpedCheckerIds.length > 0).toBe(true);
 
     if (state.status === 'gameOver') {
       state = createInitialState(config);

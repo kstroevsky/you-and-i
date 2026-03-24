@@ -388,4 +388,111 @@ describe('game engine moves', () => {
       path: ['A1'],
     });
   });
+
+  it('allows returning to the initial position through a different jumped checker', () => {
+    const b1 = checker('black');
+    const b2 = checker('black');
+    const c2 = checker('black');
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        A1: [checker('white')],
+        B1: [b1],
+        B2: [b2],
+        C2: [c2],
+        F6: [checker('black')],
+      }),
+    );
+    const afterFirstJump = applyAction(
+      state,
+      {
+        type: 'jumpSequence',
+        source: 'A1',
+        path: ['C3'],
+      },
+      withConfig(),
+    );
+    const afterSecondJump = applyAction(
+      afterFirstJump,
+      {
+        type: 'jumpSequence',
+        source: 'C3',
+        path: ['C1'],
+      },
+      withConfig(),
+    );
+    const jumpActions = getLegalActionsForCell(afterSecondJump, 'C1', withConfig()).filter(
+      (action) => action.type === 'jumpSequence',
+    );
+
+    expect(afterSecondJump.pendingJump?.jumpedCheckerIds).toEqual([b2.id, c2.id]);
+    expect(jumpActions).toContainEqual({
+      type: 'jumpSequence',
+      source: 'C1',
+      path: ['A1'],
+    });
+  });
+
+  it('allows revisiting an earlier landing when the jump uses a different checker', () => {
+    const a4 = checker('black');
+    const b2 = checker('black');
+    const b3 = checker('black');
+    const b4 = checker('black');
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        A1: [checker('white')],
+        A4: [a4],
+        B2: [b2],
+        B3: [b3],
+        B4: [b4],
+        F6: [checker('black')],
+      }),
+    );
+    const afterFirstJump = applyAction(
+      state,
+      {
+        type: 'jumpSequence',
+        source: 'A1',
+        path: ['C3'],
+      },
+      withConfig(),
+    );
+    const afterSecondJump = applyAction(
+      afterFirstJump,
+      {
+        type: 'jumpSequence',
+        source: 'C3',
+        path: ['A5'],
+      },
+      withConfig(),
+    );
+    const afterThirdJump = applyAction(
+      afterSecondJump,
+      {
+        type: 'jumpSequence',
+        source: 'A5',
+        path: ['A3'],
+      },
+      withConfig(),
+    );
+    const jumpActions = getLegalActionsForCell(afterThirdJump, 'A3', withConfig()).filter(
+      (action) => action.type === 'jumpSequence',
+    );
+
+    expect(afterThirdJump.pendingJump?.jumpedCheckerIds).toEqual([b2.id, b4.id, a4.id]);
+    expect(jumpActions).toContainEqual({
+      type: 'jumpSequence',
+      source: 'A3',
+      path: ['C3'],
+    });
+    expect(jumpActions).not.toContainEqual({
+      type: 'jumpSequence',
+      source: 'A3',
+      path: ['C1'],
+    });
+    expect(jumpActions).not.toContainEqual({
+      type: 'jumpSequence',
+      source: 'A3',
+      path: ['C5'],
+    });
+  });
 });

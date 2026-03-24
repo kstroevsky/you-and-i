@@ -1,8 +1,9 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '@/app/App';
+import { setPwaLifecycleStateForTests } from '@/app/pwa/pwaLifecycleStore';
 import { GameStoreProvider } from '@/app/providers/GameStoreProvider';
 import { createInitialState } from '@/domain';
 import type { SerializableSession } from '@/shared/types/session';
@@ -72,6 +73,27 @@ describe('App', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Эта подсвеченная шашка может продолжать прыгать/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Клетка C3' })).toHaveAttribute('data-followup', 'true');
+  }, 10_000);
+
+  it('shows the waiting-update banner and applies the update on demand', async () => {
+    const user = userEvent.setup();
+    const applyUpdate = vi.fn(() => Promise.resolve());
+
+    setPwaLifecycleStateForTests({
+      applyUpdate,
+      needRefresh: true,
+      offlineReady: false,
+    });
+
+    renderApp();
+
+    expect(
+      await screen.findByText('Готова новая версия. Обновите приложение, когда текущий ход можно безопасно прервать.'),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Обновить приложение' }));
+
+    expect(applyUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('switches the interface language globally, including lazy-loaded tabs', async () => {

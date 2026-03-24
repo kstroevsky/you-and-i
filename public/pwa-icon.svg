@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">White Maybe Black app icon</title>
+  <desc id="desc">A warm-toned board icon with stacked checkers.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="0%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#ece6db" />
+      <stop offset="100%" stop-color="#d8ccb9" />
+    </linearGradient>
+    <linearGradient id="board" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#4f3f32" />
+      <stop offset="100%" stop-color="#2f231a" />
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <rect x="96" y="96" width="320" height="320" rx="44" fill="url(#board)" />
+
+  <g stroke="#b39c81" stroke-linecap="round" stroke-width="10">
+    <path d="M149 149h214" />
+    <path d="M149 203h214" />
+    <path d="M149 257h214" />
+    <path d="M149 311h214" />
+    <path d="M149 365h214" />
+    <path d="M149 149v214" />
+    <path d="M203 149v214" />
+    <path d="M257 149v214" />
+    <path d="M311 149v214" />
+    <path d="M365 149v214" />
+  </g>
+
+  <g>
+    <ellipse cx="198" cy="308" rx="54" ry="22" fill="#1c1108" opacity="0.18" />
+    <ellipse cx="198" cy="287" rx="54" ry="22" fill="#fcf9f3" />
+    <ellipse cx="198" cy="255" rx="54" ry="22" fill="#fcf9f3" opacity="0.96" />
+    <ellipse cx="198" cy="223" rx="54" ry="22" fill="#fcf9f3" opacity="0.92" />
+    <path d="M252 223c0 28-24 51-54 51s-54-23-54-51 24-51 54-51 54 23 54 51z" fill="#fcf9f3" />
+    <path d="M252 255c0 28-24 51-54 51s-54-23-54-51 24-51 54-51 54 23 54 51z" fill="#fcf9f3" opacity="0.96" />
+    <path d="M252 287c0 28-24 51-54 51s-54-23-54-51 24-51 54-51 54 23 54 51z" fill="#fcf9f3" />
+  </g>
+
+  <g>
+    <ellipse cx="325" cy="290" rx="61" ry="24" fill="#040404" opacity="0.24" />
+    <ellipse cx="325" cy="266" rx="61" ry="24" fill="#c87f22" />
+    <ellipse cx="325" cy="232" rx="61" ry="24" fill="#3f2913" />
+    <path d="M386 232c0 31-27 56-61 56s-61-25-61-56 27-56 61-56 61 25 61 56z" fill="#3f2913" />
+    <path d="M386 266c0 31-27 56-61 56s-61-25-61-56 27-56 61-56 61 25 61 56z" fill="#c87f22" />
+    <circle cx="325" cy="232" r="17" fill="#f9f3e8" opacity="0.92" />
+  </g>
+</svg>

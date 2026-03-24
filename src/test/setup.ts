@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
+import { resetPwaLifecycleForTests } from '@/app/pwa/pwaLifecycleStore';
 import { resetViewportQueryStoresForTests } from '@/shared/hooks/useIsMobileViewport';
 
 function evaluateMediaQuery(query: string): boolean {
@@ -101,6 +102,7 @@ Object.defineProperty(window, 'matchMedia', {
 afterEach(() => {
   cleanup();
   mediaQueryLists.clear();
+  resetPwaLifecycleForTests();
   resetViewportQueryStoresForTests();
   window.localStorage.clear();
 });

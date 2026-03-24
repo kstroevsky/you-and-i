@@ -3,6 +3,8 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { AppHeader } from '@/app/components/AppHeader';
 import type { AppTab } from '@/app/components/AppTabs';
+import { PwaStatusBanner } from '@/app/pwa/PwaStatusBanner';
+import { usePwaLifecycle } from '@/app/pwa/usePwaLifecycle';
 import { TabLoading } from '@/app/components/TabLoading';
 import { useGameStore } from '@/app/providers/GameStoreProvider';
 
@@ -40,6 +42,13 @@ function scheduleIdleTask(task: () => void): () => void {
 
 export function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('game');
+  const {
+    applyUpdate,
+    dismissNeedRefresh,
+    dismissOfflineReady,
+    needRefresh,
+    offlineReady,
+  } = usePwaLifecycle();
   const { language, setPreference } = useGameStore(
     useShallow((state) => ({
       language: state.preferences.language,
@@ -57,6 +66,14 @@ export function App() {
           language={language}
           onChangeLanguage={(nextLanguage) => setPreference({ language: nextLanguage })}
           onChangeTab={setActiveTab}
+        />
+        <PwaStatusBanner
+          applyUpdate={applyUpdate}
+          language={language}
+          needRefresh={needRefresh}
+          offlineReady={offlineReady}
+          onDismissNeedRefresh={dismissNeedRefresh}
+          onDismissOfflineReady={dismissOfflineReady}
         />
 
         <section className={styles.content}>

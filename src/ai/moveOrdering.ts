@@ -46,6 +46,11 @@ export type OrderedAction = {
   winsImmediately: boolean;
 };
 
+export type PrecomputedOrderedAction = Omit<OrderedAction, 'score'> & {
+  serializedAction: string;
+  staticScore: number;
+};
+
 export type OrderMovesOptions = {
   actions?: TurnAction[];
   deadline?: number;
@@ -243,8 +248,72 @@ function getFreezeSwingBonus(state: EngineState, action: TurnAction, player: Pla
   return jumpedChecker.frozen ? 0 : 1;
 }
 
-/** Orders moves for alpha-beta search and prunes quiet moves by preset breadth. */
-export function orderMoves(
+/** Keeps numeric ordering terms bounded so outliers do not dominate the move sort. */
+function clampScore(value: number, limit: number): number {
+  return Math.max(-limit, Math.min(limit, value));
+}
+
+/** Extracts the dynamic heuristic terms that evolve while the search runs. */
+function getDynamicScore(
+  entry: Pick<PrecomputedOrderedAction, 'action' | 'serializedAction'>,
+  {
+    continuationScores,
+    historyScores,
+    killerMoves = [],
+    previousActionKey = null,
+    pvMove,
+    ttMove,
+  }: Pick<
+    OrderMovesOptions,
+    'continuationScores' | 'historyScores' | 'killerMoves' | 'previousActionKey' | 'pvMove' | 'ttMove'
+  >,
+): number {
+  const historyScore = historyScores?.get(entry.serializedAction) ?? 0;
+  const continuationScore =
+    previousActionKey === null
+      ? 0
+      : continuationScores?.get(`${previousActionKey}->${entry.serializedAction}`) ?? 0;
+  const killerScore = killerMoves.some((killer) => isSameAction(killer, entry.action)) ? 9_000 : 0;
+  let score = 0;
+
+  if (isSameAction(ttMove, entry.action)) {
+    score += 200_000;
+  }
+
+  if (isSameAction(pvMove, entry.action)) {
+    score += 150_000;
+  }
+
+  score += Math.min(12_000, historyScore);
+  score += Math.min(8_000, continuationScore);
+  score += killerScore;
+
+  return score;
+}
+
+/** Applies the common post-sort trimming rules shared by normal and precomputed ordering. */
+function finalizeOrderedActions(
+  ordered: OrderedAction[],
+  preset: AiDifficultyPreset,
+  includeAllQuietMoves = false,
+): OrderedAction[] {
+  ordered.sort((left, right) => right.score - left.score);
+
+  if (includeAllQuietMoves) {
+    return ordered;
+  }
+
+  // Harder difficulties search deeper and wider, but tactical moves are always preserved.
+  const tacticalMoves = ordered.filter((entry) => entry.isTactical);
+  const quietMoves = ordered
+    .filter((entry) => !entry.isTactical)
+    .slice(0, preset.quietMoveLimit);
+
+  return [...tacticalMoves, ...quietMoves];
+}
+
+/** Precomputes the expensive state-derived move features that do not change between root depths. */
+export function precomputeOrderedActions(
   state: EngineState,
   _perspectivePlayer: Player,
   ruleConfig: RuleConfig,
@@ -253,26 +322,32 @@ export function orderMoves(
     actions,
     deadline,
     grandparentPositionKey = null,
-    historyScores,
-    includeAllQuietMoves = false,
-    killerMoves = [],
     now,
     participationState = null,
     policyPriors = null,
     previousStrategicTags = null,
-    previousActionKey = null,
     policyPriorWeight = preset.policyPriorWeight,
-    pvMove,
     repetitionPenalty = preset.repetitionPenalty,
     samePlayerPreviousAction = null,
     selfUndoPenalty = preset.selfUndoPenalty,
-    continuationScores,
-    ttMove,
-  }: OrderMovesOptions = {},
-): OrderedAction[] {
+  }: Pick<
+    OrderMovesOptions,
+    | 'actions'
+    | 'deadline'
+    | 'grandparentPositionKey'
+    | 'now'
+    | 'participationState'
+    | 'policyPriors'
+    | 'policyPriorWeight'
+    | 'previousStrategicTags'
+    | 'repetitionPenalty'
+    | 'samePlayerPreviousAction'
+    | 'selfUndoPenalty'
+  > = {},
+): PrecomputedOrderedAction[] {
   const actor = state.currentPlayer;
   const baseStructureScore = evaluateStructureState(state, actor, ruleConfig);
-  const ordered = (actions ?? getLegalActions(state, ruleConfig)).map<OrderedAction>((action) => {
+  return (actions ?? getLegalActions(state, ruleConfig)).map<PrecomputedOrderedAction>((action) => {
     throwIfMoveOrderingTimedOut(deadline, now);
 
     const nextState = advanceEngineState(state, action, ruleConfig);
@@ -319,64 +394,46 @@ export function orderMoves(
       },
     );
     const isForced = winsImmediately || nextState.status === 'gameOver';
-    const historyScore = historyScores?.get(serializedAction) ?? 0;
-    const continuationScore =
-      previousActionKey === null
-        ? 0
-        : continuationScores?.get(`${previousActionKey}->${serializedAction}`) ?? 0;
-    const killerScore = killerMoves.some((killer) => isSameAction(killer, action)) ? 9_000 : 0;
     const noveltyPenalty = getNoveltyPenalty(strategicProfile.tags, previousStrategicTags);
-
-    let score = 0;
-
-    if (isSameAction(ttMove, action)) {
-      score += 200_000;
-    }
-
-    if (isSameAction(pvMove, action)) {
-      score += 150_000;
-    }
+    let staticScore = 0;
 
     if (winsImmediately) {
-      score += 100_000;
+      staticScore += 100_000;
     }
 
     if (action.type === 'jumpSequence') {
-      score += 7_500;
+      staticScore += 7_500;
     }
 
     if (action.type === 'manualUnfreeze') {
-      score += 5_500;
+      staticScore += 5_500;
     }
 
     if (frontRowGrowth) {
-      score += 5_000;
+      staticScore += 5_000;
     }
 
     if (homeProgress) {
-      score += 2_500;
+      staticScore += 2_500;
     }
 
     if (freezeSwingBonus > 0) {
-      score += freezeSwingBonus * 1_200;
+      staticScore += freezeSwingBonus * 1_200;
     }
 
-    score += Math.max(-8_000, Math.min(8_000, staticPromise));
-    score += Math.max(-6_000, Math.min(6_000, strategicProfile.intentDelta));
-    score += Math.max(-2_400, Math.min(2_400, participationProfile.participationDelta));
-    score += strategicProfile.policyBias;
-    score += Math.round(policyPrior * policyPriorWeight);
-    score += Math.min(12_000, historyScore);
-    score += Math.min(8_000, continuationScore);
-    score += killerScore;
-    score -= noveltyPenalty;
+    staticScore += clampScore(staticPromise, 8_000);
+    staticScore += clampScore(strategicProfile.intentDelta, 6_000);
+    staticScore += clampScore(participationProfile.participationDelta, 2_400);
+    staticScore += strategicProfile.policyBias;
+    staticScore += Math.round(policyPrior * policyPriorWeight);
+    staticScore -= noveltyPenalty;
 
     if (isRepetition) {
-      score -= repetitionPenalty * (repeatedPositionCount - 1);
+      staticScore -= repetitionPenalty * (repeatedPositionCount - 1);
     }
 
     if (isSelfUndo && !isTactical) {
-      score -= selfUndoPenalty;
+      staticScore -= selfUndoPenalty;
     }
 
     return {
@@ -395,25 +452,79 @@ export function orderMoves(
       repeatedPositionCount,
       repeatsSourceFamily: participationProfile.repeatsSourceFamily,
       repeatsSourceRegion: participationProfile.repeatsSourceRegion,
-      score,
       sourceFamily: participationProfile.sourceFamily,
       sourceRegion: participationProfile.sourceRegion,
+      serializedAction,
+      staticScore,
       tags: strategicProfile.tags,
       winsImmediately,
     };
   });
+}
 
-  ordered.sort((left, right) => right.score - left.score);
+/** Re-scores precomputed move entries using the heuristic tables that evolve during search. */
+export function orderPrecomputedMoves(
+  precomputedActions: PrecomputedOrderedAction[],
+  preset: AiDifficultyPreset,
+  {
+    continuationScores,
+    deadline,
+    historyScores,
+    includeAllQuietMoves = false,
+    killerMoves = [],
+    now,
+    previousActionKey = null,
+    pvMove,
+    ttMove,
+  }: Pick<
+    OrderMovesOptions,
+    | 'continuationScores'
+    | 'deadline'
+    | 'historyScores'
+    | 'includeAllQuietMoves'
+    | 'killerMoves'
+    | 'now'
+    | 'previousActionKey'
+    | 'pvMove'
+    | 'ttMove'
+  > = {},
+): OrderedAction[] {
+  const ordered = precomputedActions.map<OrderedAction>((entry) => {
+    throwIfMoveOrderingTimedOut(deadline, now);
 
-  if (includeAllQuietMoves) {
-    return ordered;
-  }
+    return {
+      ...entry,
+      score:
+        entry.staticScore +
+        getDynamicScore(entry, {
+          continuationScores,
+          historyScores,
+          killerMoves,
+          previousActionKey,
+          pvMove,
+          ttMove,
+        }),
+    };
+  });
 
-  // Harder difficulties search deeper and wider, but tactical moves are always preserved.
-  const tacticalMoves = ordered.filter((entry) => entry.isTactical);
-  const quietMoves = ordered
-    .filter((entry) => !entry.isTactical)
-    .slice(0, preset.quietMoveLimit);
+  return finalizeOrderedActions(ordered, preset, includeAllQuietMoves);
+}
 
-  return [...tacticalMoves, ...quietMoves];
+/** Orders moves for alpha-beta search and prunes quiet moves by preset breadth. */
+export function orderMoves(
+  state: EngineState,
+  perspectivePlayer: Player,
+  ruleConfig: RuleConfig,
+  preset: AiDifficultyPreset,
+  options: OrderMovesOptions = {},
+): OrderedAction[] {
+  const precomputedActions = precomputeOrderedActions(
+    state,
+    perspectivePlayer,
+    ruleConfig,
+    preset,
+    options,
+  );
+
+  return orderPrecomputedMoves(precomputedActions, preset, options);
 }

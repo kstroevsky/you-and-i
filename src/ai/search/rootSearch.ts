@@ -1,5 +1,10 @@
 import { evaluateState } from '@/ai/evaluation';
-import { orderMoves } from '@/ai/moveOrdering';
+import {
+  orderMoves,
+  orderPrecomputedMoves,
+  precomputeOrderedActions,
+  type PrecomputedOrderedAction,
+} from '@/ai/moveOrdering';
 import { buildParticipationState } from '@/ai/participation';
 import { AI_DIFFICULTY_PRESETS } from '@/ai/presets';
 import { getStrategicIntent } from '@/ai/strategy';
@@ -151,42 +156,24 @@ export function chooseComputerAction({
    * PV hints evolve as the search learns more about the position.
    */
   const buildRootOrdering = (pvMove: TurnAction | null): ReturnType<typeof orderMoves> =>
-    orderMoves(state, state.currentPlayer, ruleConfig, preset, {
-      actions: legalActions,
+    orderPrecomputedMoves(getRootPrecomputed(), preset, {
       deadline,
-      grandparentPositionKey: context.rootSelfUndoPositionKey,
       historyScores: context.historyScores,
       includeAllQuietMoves: true,
       killerMoves: context.killerMovesByDepth.get(0) ?? [],
       now,
-      participationState: rootParticipationState,
-      policyPriors,
-      previousStrategicTags: context.rootPreviousStrategicTags,
       previousActionKey: null,
-      policyPriorWeight: preset.policyPriorWeight,
       pvMove,
-      repetitionPenalty: preset.repetitionPenalty,
-      samePlayerPreviousAction: context.rootPreviousOwnAction,
-      selfUndoPenalty: preset.selfUndoPenalty,
       continuationScores: context.continuationScores,
       ttMove: context.table.get(rootPositionKey)?.bestAction ?? null,
     });
   /** Timeout fallback ordering avoids the deadline check so it can always produce a legal answer. */
   const buildOrderedFallback = (): ReturnType<typeof orderMoves> =>
-    orderMoves(state, state.currentPlayer, ruleConfig, preset, {
-      actions: legalActions,
-      grandparentPositionKey: context.rootSelfUndoPositionKey,
+    orderPrecomputedMoves(getFallbackRootPrecomputed(), preset, {
       historyScores: context.historyScores,
       includeAllQuietMoves: true,
       killerMoves: context.killerMovesByDepth.get(0) ?? [],
-      participationState: rootParticipationState,
-      policyPriors,
-      previousStrategicTags: context.rootPreviousStrategicTags,
       previousActionKey: null,
-      policyPriorWeight: preset.policyPriorWeight,
-      repetitionPenalty: preset.repetitionPenalty,
-      samePlayerPreviousAction: context.rootPreviousOwnAction,
-      selfUndoPenalty: preset.selfUndoPenalty,
       continuationScores: context.continuationScores,
       ttMove: context.table.get(rootPositionKey)?.bestAction ?? null,
     });
@@ -198,7 +185,39 @@ export function chooseComputerAction({
   let fallbackKind: AiSearchResult['fallbackKind'] = 'none';
   let timedOut = false;
   let rootCandidates: RootRankedAction[] = [];
+  let rootPrecomputedActions: PrecomputedOrderedAction[] = [];
   let rootOrderedMoves: ReturnType<typeof orderMoves> = [];
+
+  const createRootPrecomputed = (useDeadline: boolean): PrecomputedOrderedAction[] =>
+    precomputeOrderedActions(state, state.currentPlayer, ruleConfig, preset, {
+      actions: legalActions,
+      deadline: useDeadline ? deadline : undefined,
+      grandparentPositionKey: context.rootSelfUndoPositionKey,
+      now: useDeadline ? now : undefined,
+      participationState: rootParticipationState,
+      policyPriors,
+      policyPriorWeight: preset.policyPriorWeight,
+      previousStrategicTags: context.rootPreviousStrategicTags,
+      repetitionPenalty: preset.repetitionPenalty,
+      samePlayerPreviousAction: context.rootPreviousOwnAction,
+      selfUndoPenalty: preset.selfUndoPenalty,
+    });
+
+  const getRootPrecomputed = (): PrecomputedOrderedAction[] => {
+    if (!rootPrecomputedActions.length) {
+      rootPrecomputedActions = createRootPrecomputed(true);
+    }
+
+    return rootPrecomputedActions;
+  };
+
+  const getFallbackRootPrecomputed = (): PrecomputedOrderedAction[] => {
+    if (!rootPrecomputedActions.length) {
+      rootPrecomputedActions = createRootPrecomputed(false);
+    }
+
+    return rootPrecomputedActions;
+  };
 
   try {
     rootOrderedMoves = buildRootOrdering(null);

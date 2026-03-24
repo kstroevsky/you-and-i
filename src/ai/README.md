@@ -243,6 +243,13 @@ The file also classifies moves into concepts the rest of the AI uses:
 - `sourceFamily`
 - `sourceRegion`
 
+The expensive part of ordering is also intentionally split in two:
+
+- `precomputeOrderedActions()` computes per-move static features that do not change while the root position stays the same;
+- `orderPrecomputedMoves()` re-applies only the dynamic search-learned terms (`TT`, `PV`, history, continuation, killer moves).
+
+`search/rootSearch.ts` reuses that precomputed root set across iterative-deepening passes instead of rebuilding the full static ordering payload at every depth. This preserves move quality because the same dynamic ordering terms are still re-scored each pass, and parity is locked by [`moveOrdering.test.ts`](./moveOrdering.test.ts).
+
 Why this file exists separately from search:
 
 - ordering logic is rich enough to deserve independent tests and documentation;
@@ -443,6 +450,7 @@ This path is modest on purpose. The runtime search remains the main intelligence
 
 Important test files:
 
+- [`moveOrdering.test.ts`](./moveOrdering.test.ts)
 - [`search.behavior.test.ts`](./search.behavior.test.ts)
 - [`search.timeout.test.ts`](./search.timeout.test.ts)
 - [`search.soak.test.ts`](./search.soak.test.ts)
@@ -481,7 +489,7 @@ Those metrics feed [`scripts/ai-variety.report.ts`](../../scripts/ai-variety.rep
 | File | Main exported functions | Bigger reason it exists |
 | --- | --- | --- |
 | [`evaluation.ts`](./evaluation.ts) | `evaluateStructureState`, `evaluateState` | Converts position semantics into scalar scores |
-| [`moveOrdering.ts`](./moveOrdering.ts) | `orderMoves` | Makes alpha-beta practical by searching promising moves first |
+| [`moveOrdering.ts`](./moveOrdering.ts) | `orderMoves`, `precomputeOrderedActions`, `orderPrecomputedMoves` | Makes alpha-beta practical by searching promising moves first while allowing exact root-order reuse |
 | [`participation.ts`](./participation.ts) | `buildParticipationState`, `getParticipationScore`, `getActionParticipationProfile` | Rewards broader, less repetitive material participation |
 | [`strategy.ts`](./strategy.ts) | `analyzePosition`, `getStrategicIntent`, `getStrategicScore`, `getActionStrategicProfile` | Captures game-specific strategic structure |
 | [`presets.ts`](./presets.ts) | `AI_DIFFICULTY_PRESETS` | Encodes product difficulty policy as data |

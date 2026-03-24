@@ -484,6 +484,13 @@ Those metrics feed [`scripts/ai-variety.report.ts`](../../scripts/ai-variety.rep
 
 [`scripts/domainPerformance.report.ts`](../../scripts/domainPerformance.report.ts) and [`scripts/perf-report.mjs`](../../scripts/perf-report.mjs) benchmark both the engine and the shipping browser build. This matters because the AI is designed for a browser worker, not a server with unlimited compute.
 
+Today that reporting covers four distinct views:
+
+- domain microbenchmarks such as hashing and legal-action generation;
+- root-ordering reuse benchmark on deterministic `opening`, `turn50`, `turn100`, and `turn200` states;
+- mobile browser measurements under `1x`, `4x`, and `6x` CPU throttling;
+- imported late-game hard-AI reply timings on those same deterministic turn-count fixtures.
+
 ## File-By-File Summary
 
 | File | Main exported functions | Bigger reason it exists |

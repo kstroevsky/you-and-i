@@ -7,6 +7,13 @@ import process from 'node:process';
 import { describe, expect, it } from 'vitest';
 
 import { AI_DIFFICULTY_PRESETS, chooseComputerAction } from '@/ai';
+import { orderMoves, orderPrecomputedMoves, precomputeOrderedActions } from '@/ai/moveOrdering';
+import { buildParticipationState } from '@/ai/participation';
+import {
+  getRootPreviousOwnAction,
+  getRootPreviousStrategicTags,
+  getRootSelfUndoPositionKey,
+} from '@/ai/search/heuristics';
 import {
   advanceEngineState,
   applyAction,
@@ -14,11 +21,14 @@ import {
   getLegalActions,
   getLegalActionsForCell,
   hashPosition,
+  serializeSession,
 } from '@/domain';
 import { createEmptyBoard } from '@/domain/model/board';
 import { createCoord } from '@/domain/model/coordinates';
 import type { Coord, GameState, TurnAction } from '@/domain/model/types';
+import { actionLabel } from '@/shared/i18n/catalog';
 import { checker, gameStateWithBoard, resetFactoryIds, withConfig } from '@/test/factories';
+import { createSession } from '@/test/factories';
 
 const shouldRun = process.env.WMBL_PERF_REPORT === '1';
 const outputPath = process.env.WMBL_DOMAIN_PERF_OUTPUT;
@@ -28,6 +38,39 @@ type PerfMetric = {
   iterations: number;
   totalMs: number;
 };
+
+type RootCacheBenchmarkEntry = {
+  baselineMs: number;
+  gainMs: number;
+  gainPercent: number;
+  label: string;
+  optimizedMs: number;
+  turnCount: number;
+};
+
+type LateGameAiFixture = {
+  actionButtonLabel: string;
+  label: string;
+  minimumTurnNumberAfterAi: number;
+  moveNumber: number;
+  sessionJson: string;
+  sourceCellLabel: string;
+  targetCellLabels: string[];
+  turnCount: number;
+};
+
+const defaultRootOrderingBenchmarkIterations = 24;
+
+function resolveRootOrderingBenchmarkIterations(): number {
+  const rawValue = process.env.WMBL_ROOT_ORDER_BENCH_ITERS;
+  const parsedValue = Number.parseInt(rawValue ?? '', 10);
+
+  if (Number.isFinite(parsedValue) && parsedValue > 0) {
+    return parsedValue;
+  }
+
+  return defaultRootOrderingBenchmarkIterations;
+}
 
 function round(value: number, digits = 2): number {
   return Math.round(value * 10 ** digits) / 10 ** digits;
@@ -64,6 +107,10 @@ function actionKey(action: TurnAction | null): string {
     default:
       return `${action.type}:${action.source}:${action.target}`;
   }
+}
+
+function cellButtonLabel(coord: Coord): string {
+  return `Клетка ${coord}`;
 }
 
 function createOpponentThreatState(): GameState {
@@ -129,6 +176,205 @@ function buildSelectableBaseline(state: GameState): Coord[] {
 
 function hasLegalAction(state: GameState, config = withConfig()): boolean {
   return getLegalActions(state, config).length > 0;
+}
+
+function advanceDeterministicTurn(state: GameState, config: ReturnType<typeof withConfig>): GameState {
+  const legalActions = getLegalActions(state, config);
+  const action = legalActions[0];
+
+  if (!action) {
+    return state;
+  }
+
+  return applyAction(state, action, config);
+}
+
+function createLateGameState(turnCount: number, config: ReturnType<typeof withConfig>): GameState {
+  let state = createInitialState(config);
+
+  for (let turn = 0; turn < turnCount; turn += 1) {
+    if (state.status === 'gameOver') {
+      state = createInitialState(config);
+    }
+
+    state = advanceDeterministicTurn(state, config);
+  }
+
+  return state;
+}
+
+function pickTurnEndingAction(
+  state: GameState,
+  config: ReturnType<typeof withConfig>,
+): { action: TurnAction; nextState: GameState } {
+  for (const action of getLegalActions(state, config)) {
+    const nextState = applyAction(state, action, config);
+
+    if (
+      nextState.status === 'active' &&
+      nextState.currentPlayer !== state.currentPlayer &&
+      getLegalActions(nextState, config).length > 0
+    ) {
+      return { action, nextState };
+    }
+  }
+
+  throw new Error(`No turn-ending late-game fixture action found at move ${state.moveNumber}.`);
+}
+
+function targetCellLabels(action: TurnAction): string[] {
+  if (action.type === 'manualUnfreeze') {
+    return [];
+  }
+
+  if (action.type === 'jumpSequence') {
+    return action.path.map((coord) => cellButtonLabel(coord));
+  }
+
+  return [cellButtonLabel(action.target)];
+}
+
+function buildLateGameAiFixtures(
+  config: ReturnType<typeof withConfig>,
+): LateGameAiFixture[] {
+  const scenarios = [
+    { label: 'opening', state: createInitialState(config), turnCount: 0 },
+    { label: 'turn50', state: createLateGameState(50, config), turnCount: 50 },
+    { label: 'turn100', state: createLateGameState(100, config), turnCount: 100 },
+    { label: 'turn200', state: createLateGameState(200, config), turnCount: 200 },
+  ];
+
+  return scenarios.map(({ label, state, turnCount }) => {
+    const { action, nextState } = pickTurnEndingAction(state, config);
+    const session = createSession(state, {
+      matchSettings: {
+        aiDifficulty: 'hard',
+        humanPlayer: state.currentPlayer,
+        opponentMode: 'computer',
+      },
+    });
+
+    return {
+      actionButtonLabel: actionLabel('russian', action.type),
+      label,
+      minimumTurnNumberAfterAi: nextState.moveNumber + 1,
+      moveNumber: state.moveNumber,
+      sessionJson: serializeSession(session),
+      sourceCellLabel:
+        action.type === 'manualUnfreeze'
+          ? cellButtonLabel(action.coord)
+          : cellButtonLabel(action.source),
+      targetCellLabels: targetCellLabels(action),
+      turnCount,
+    };
+  });
+}
+
+function measureRootOrderingLoop(
+  state: GameState,
+  config: ReturnType<typeof withConfig>,
+  mode: 'baseline' | 'optimized',
+): number {
+  const preset = AI_DIFFICULTY_PRESETS.hard;
+  const legalActions = getLegalActions(state, config);
+
+  if (!legalActions.length) {
+    return 0;
+  }
+
+  const sharedOptions = {
+    actions: legalActions,
+    continuationScores: new Map<string, number>(),
+    grandparentPositionKey: getRootSelfUndoPositionKey(state),
+    historyScores: new Map<string, number>(),
+    includeAllQuietMoves: true,
+    killerMoves: [] as TurnAction[],
+    participationState: buildParticipationState(state, preset.participationWindow),
+    policyPriors: null,
+    policyPriorWeight: preset.policyPriorWeight,
+    previousActionKey: null,
+    previousStrategicTags: getRootPreviousStrategicTags(state),
+    pvMove: null as TurnAction | null,
+    repetitionPenalty: preset.repetitionPenalty,
+    samePlayerPreviousAction: getRootPreviousOwnAction(state),
+    selfUndoPenalty: preset.selfUndoPenalty,
+    ttMove: null as TurnAction | null,
+  };
+  const iterations = resolveRootOrderingBenchmarkIterations();
+  const startedAt = performance.now();
+
+  for (let index = 0; index < iterations; index += 1) {
+    let pvMove: TurnAction | null = null;
+
+    if (mode === 'baseline') {
+      for (let depth = 1; depth <= preset.maxDepth; depth += 1) {
+        const ranked = orderMoves(
+          state,
+          state.currentPlayer,
+          config,
+          preset,
+          {
+            ...sharedOptions,
+            pvMove,
+          },
+        );
+
+        pvMove = ranked[0]?.action ?? null;
+      }
+      continue;
+    }
+
+    const precomputed = precomputeOrderedActions(
+      state,
+      state.currentPlayer,
+      config,
+      preset,
+      sharedOptions,
+    );
+
+    for (let depth = 1; depth <= preset.maxDepth; depth += 1) {
+      const ranked = orderPrecomputedMoves(precomputed, preset, {
+        continuationScores: sharedOptions.continuationScores,
+        historyScores: sharedOptions.historyScores,
+        includeAllQuietMoves: true,
+        killerMoves: sharedOptions.killerMoves,
+        previousActionKey: null,
+        pvMove,
+        ttMove: null,
+      });
+
+      pvMove = ranked[0]?.action ?? null;
+    }
+  }
+
+  return (performance.now() - startedAt) / iterations;
+}
+
+function buildRootCacheBenchmark(
+  config: ReturnType<typeof withConfig>,
+): RootCacheBenchmarkEntry[] {
+  const scenarios = [
+    { label: 'opening', state: createInitialState(config), turnCount: 0 },
+    { label: 'turn50', state: createLateGameState(50, config), turnCount: 50 },
+    { label: 'turn100', state: createLateGameState(100, config), turnCount: 100 },
+    { label: 'turn200', state: createLateGameState(200, config), turnCount: 200 },
+  ];
+
+  return scenarios.map(({ label, state, turnCount }) => {
+    const baselineMs = measureRootOrderingLoop(state, config, 'baseline');
+    const optimizedMs = measureRootOrderingLoop(state, config, 'optimized');
+    const gainMs = baselineMs - optimizedMs;
+    const gainPercent = baselineMs > 0 ? (gainMs / baselineMs) * 100 : 0;
+
+    return {
+      baselineMs: round(baselineMs, 4),
+      gainMs: round(gainMs, 4),
+      gainPercent: round(gainPercent, 2),
+      label,
+      optimizedMs: round(optimizedMs, 4),
+      turnCount,
+    };
+  });
 }
 
 const describePerf = shouldRun ? describe : describe.skip;
@@ -241,11 +487,13 @@ describePerf('domain performance report', () => {
         ),
       },
       ai,
+      lateGameAiFixtures: buildLateGameAiFixtures(config),
+      rootOrderingCacheBenchmark: buildRootCacheBenchmark(config),
     };
 
     await mkdir(path.dirname(outputPath ?? ''), { recursive: true });
     await writeFile(outputPath ?? '', `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
     expect(report.domain.getLegalActions.avgMs).toBeGreaterThan(0);
-  }, 30_000);
+  }, 90_000);
 });

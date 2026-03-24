@@ -15,6 +15,30 @@ const summaryPath = path.join(outputDir, 'perf-report.md');
 const domainPerfPath = path.join(outputDir, 'domain-perf.json');
 const previewPort = 4176;
 const previewUrl = `http://127.0.0.1:${previewPort}/`;
+const defaultMobileCpuRates = [1, 4, 6];
+
+function cpuRateKey(rate) {
+  return `${rate}x`;
+}
+
+function parseCpuRates(input) {
+  if (!input?.trim()) {
+    return defaultMobileCpuRates;
+  }
+
+  const parsed = input
+    .split(',')
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isFinite(value) && value >= 1);
+  const normalized = Array.from(new Set(parsed.length ? parsed : defaultMobileCpuRates))
+    .sort((left, right) => left - right);
+
+  if (!normalized.includes(1)) {
+    normalized.unshift(1);
+  }
+
+  return normalized;
+}
 
 function classifyLower(value, good, warn) {
   if (value <= good) {
@@ -158,8 +182,23 @@ async function collectDomainPerf() {
   return JSON.parse(await readFile(domainPerfPath, 'utf8'));
 }
 
-async function createMeasuredPage(browser, viewport) {
+async function applyCpuThrottling(page, cpuRate) {
+  if (!(cpuRate > 1)) {
+    return null;
+  }
+
+  const session = await page.context().newCDPSession(page);
+  await session.send('Emulation.setCPUThrottlingRate', { rate: cpuRate });
+  page.once('close', () => {
+    void session.detach().catch(() => {});
+  });
+
+  return session;
+}
+
+async function createMeasuredPage(browser, viewport, cpuRate = 1) {
   const page = await browser.newPage({ viewport });
+  await applyCpuThrottling(page, cpuRate);
 
   await page.addInitScript(() => {
     window.__wmblPerf = {
@@ -393,6 +432,84 @@ async function measureAiResponse(page, settings) {
   );
 }
 
+async function waitForImportedSession(page, expectedMoveNumber) {
+  await page.waitForFunction(
+    () => {
+      const importField = document.querySelector('#import-session');
+
+      return importField instanceof HTMLTextAreaElement && importField.value === '';
+    },
+    { timeout: 20000 },
+  );
+  await page.getByRole('tab', { name: 'Игра' }).click();
+  await page.waitForFunction(
+    (moveNumber) => {
+      const bodyText = document.body.textContent || '';
+      const turnMatch = bodyText.match(/Ход:\s*(\d+)/);
+      const turnNumber = turnMatch ? Number(turnMatch[1]) : null;
+
+      return turnNumber === moveNumber;
+    },
+    expectedMoveNumber,
+    { timeout: 20000 },
+  );
+}
+
+async function importLateGameSession(page, fixture) {
+  await dismissBlockingUi(page);
+  await page.getByRole('tab', { name: 'Настройки' }).click();
+  await page.getByRole('heading', { name: 'Правила и партия' }).waitFor({
+    state: 'visible',
+    timeout: 3000,
+  });
+  await page.locator('#import-session').fill(fixture.sessionJson);
+  await page.getByRole('button', { name: 'Импортировать партию' }).click();
+  await waitForImportedSession(page, fixture.moveNumber);
+  await page.getByRole('button', { name: fixture.sourceCellLabel }).waitFor({
+    state: 'visible',
+    timeout: 3000,
+  });
+}
+
+async function waitForLateGameAiTurn(page, minimumTurnNumberAfterAi) {
+  await page.waitForFunction(
+    (minimumTurnNumber) => {
+      const bodyText = document.body.textContent || '';
+      const turnMatch = bodyText.match(/Ход:\s*(\d+)/);
+      const turnNumber = turnMatch ? Number(turnMatch[1]) : 0;
+
+      return turnNumber >= minimumTurnNumber && !bodyText.includes('Компьютер думает');
+    },
+    minimumTurnNumberAfterAi,
+    { timeout: 15000 },
+  );
+}
+
+async function measureLateGameAiResponse(page, fixture) {
+  await importLateGameSession(page, fixture);
+  await page.getByRole('button', { name: fixture.sourceCellLabel }).click();
+
+  if (!fixture.targetCellLabels.length) {
+    return measureInteraction(
+      page,
+      () => page.getByRole('button', { name: fixture.actionButtonLabel, exact: true }).click(),
+      () => waitForLateGameAiTurn(page, fixture.minimumTurnNumberAfterAi),
+    );
+  }
+
+  await page.getByRole('button', { name: fixture.actionButtonLabel, exact: true }).click();
+
+  return measureInteraction(
+    page,
+    async () => {
+      for (const targetCellLabel of fixture.targetCellLabels) {
+        await page.getByRole('button', { name: targetCellLabel }).click();
+      }
+    },
+    () => waitForLateGameAiTurn(page, fixture.minimumTurnNumberAfterAi),
+  );
+}
+
 async function measureCompactTabs(page) {
   await dismissBlockingUi(page);
   const toInfo = await measureInteraction(
@@ -422,8 +539,12 @@ async function collectScrollMetrics(page) {
   }));
 }
 
-async function measureViewportScenario(browser, viewport) {
-  const page = await createMeasuredPage(browser, viewport);
+async function measureViewportScenario(
+  browser,
+  viewport,
+  { cpuRate = 1, lateGameAiFixtures = [] } = {},
+) {
+  const page = await createMeasuredPage(browser, viewport, cpuRate);
 
   try {
     const load = await collectLoadMetrics(page);
@@ -433,6 +554,7 @@ async function measureViewportScenario(browser, viewport) {
     };
     const ui = await measureBoardUi(page);
     const result = {
+      cpuRate,
       load,
       render,
       ui,
@@ -445,7 +567,7 @@ async function measureViewportScenario(browser, viewport) {
         black: Object.fromEntries(
           await Promise.all(
             ['easy', 'medium', 'hard'].map(async (difficulty) => {
-              const aiPage = await createMeasuredPage(browser, viewport);
+              const aiPage = await createMeasuredPage(browser, viewport, cpuRate);
 
               try {
                 return [
@@ -461,7 +583,7 @@ async function measureViewportScenario(browser, viewport) {
         white: Object.fromEntries(
           await Promise.all(
             ['easy', 'medium', 'hard'].map(async (difficulty) => {
-              const aiPage = await createMeasuredPage(browser, viewport);
+              const aiPage = await createMeasuredPage(browser, viewport, cpuRate);
 
               try {
                 return [
@@ -475,6 +597,19 @@ async function measureViewportScenario(browser, viewport) {
           ),
         ),
       };
+      result.lateGameAi = Object.fromEntries(
+        await Promise.all(
+          lateGameAiFixtures.map(async (fixture) => {
+            const aiPage = await createMeasuredPage(browser, viewport, cpuRate);
+
+            try {
+              return [fixture.label, await measureLateGameAiResponse(aiPage, fixture)];
+            } finally {
+              await aiPage.close();
+            }
+          }),
+        ),
+      );
     }
 
     return result;
@@ -484,6 +619,15 @@ async function measureViewportScenario(browser, viewport) {
 }
 
 function buildSummary(report) {
+  const mobileProfiles = report.mobileProfiles ?? { '1x': report.mobile };
+  const weakDeviceProfiles = Object.entries(mobileProfiles)
+    .filter(([key]) => key !== '1x')
+    .sort((left, right) => Number(left[0].replace('x', '')) - Number(right[0].replace('x', '')));
+  const rootCacheBenchmarks =
+    report.domain.rootOrderingCacheBenchmark ?? report.rootOrderingCacheBenchmark ?? [];
+  const lateGameAiProfiles = Object.entries(mobileProfiles)
+    .filter(([, profile]) => profile.lateGameAi && Object.keys(profile.lateGameAi).length > 0)
+    .sort((left, right) => Number(left[0].replace('x', '')) - Number(right[0].replace('x', '')));
   const checks = [
     {
       label: 'Desktop FCP',
@@ -550,6 +694,24 @@ function buildSummary(report) {
     `- Mobile opening turn: easy ${report.mobile.ai.black.easy.elapsedMs}ms, medium ${report.mobile.ai.black.medium.elapsedMs}ms, hard ${report.mobile.ai.black.hard.elapsedMs}ms`,
     `- Mobile reply turn: easy ${report.mobile.ai.white.easy.elapsedMs}ms, medium ${report.mobile.ai.white.medium.elapsedMs}ms, hard ${report.mobile.ai.white.hard.elapsedMs}ms`,
     '',
+    '## Weak Device (CPU Throttle)',
+    ...(weakDeviceProfiles.length
+      ? weakDeviceProfiles.flatMap(([profileKey, profile]) => ([
+          `- ${profileKey}: move dialog ${profile.ui.openMoveDialog.elapsedMs}ms, hard opening ${profile.ai.black.hard.elapsedMs}ms, hard reply ${profile.ai.white.hard.elapsedMs}ms`,
+        ]))
+      : ['- No additional CPU-throttled mobile profile was collected.']),
+    '',
+    '## Late-Game AI (Hard)',
+    ...(lateGameAiProfiles.length
+      ? lateGameAiProfiles.map(([profileKey, profile]) => {
+          const lateGameLines = Object.entries(profile.lateGameAi)
+            .map(([label, result]) => `${label} ${result.elapsedMs}ms`)
+            .join(', ');
+
+          return `- ${profileKey}: ${lateGameLines}`;
+        })
+      : ['- Late-game imported AI scenarios were not collected.']),
+    '',
     '## Domain',
     `- hashPosition avg: ${report.domain.domain.hashPosition.avgMs}ms`,
     `- getLegalActions avg: ${report.domain.domain.getLegalActions.avgMs}ms`,
@@ -558,6 +720,13 @@ function buildSummary(report) {
     `- hasLegalAction check avg: ${report.domain.domain.hasLegalActionCheck.avgMs}ms`,
     `- Cell-vs-full action speedup: ${formatSpeedup(report.domain.comparisons.cellActionVsFullActionSpeedup)}`,
     `- Hash-vs-full action speedup: ${formatSpeedup(report.domain.comparisons.hashVsFullActionSpeedup)}`,
+    '',
+    '## Root Ordering Cache Benchmark',
+    ...(rootCacheBenchmarks.length
+      ? rootCacheBenchmarks.map((entry) =>
+          `- ${entry.label}: baseline ${entry.baselineMs}ms, optimized ${entry.optimizedMs}ms, gain ${entry.gainMs}ms (${entry.gainPercent}%)`,
+        )
+      : ['- Root-ordering cache benchmark was not provided by the domain report.']),
     '',
     '## Lifecycle',
     '- Store lifecycle now terminates AI workers on `visibilitychange:hidden`, `pagehide`, and store destroy/unmount.',
@@ -572,9 +741,11 @@ function buildSummary(report) {
 
 async function main() {
   await mkdir(outputDir, { recursive: true });
+  const mobileCpuRates = parseCpuRates(process.env.WMBL_PERF_CPU_RATES);
 
   process.stderr.write('perf: collecting domain benchmarks\n');
   const domain = await collectDomainPerf();
+  const lateGameAiFixtures = domain.lateGameAiFixtures ?? [];
 
   const preview = startPreviewServer();
 
@@ -588,15 +759,28 @@ async function main() {
     try {
       const chunkSizes = await collectChunkSizes();
       process.stderr.write('perf: measuring desktop browser path\n');
-      const desktop = await measureViewportScenario(browser, { width: 1440, height: 900 });
-      process.stderr.write('perf: measuring mobile browser path\n');
-      const mobile = await measureViewportScenario(browser, { width: 390, height: 844 });
+      const desktop = await measureViewportScenario(
+        browser,
+        { width: 1440, height: 900 },
+        { cpuRate: 1 },
+      );
+      const mobileProfiles = {};
+      for (const cpuRate of mobileCpuRates) {
+        process.stderr.write(`perf: measuring mobile browser path (${cpuRateKey(cpuRate)})\n`);
+        mobileProfiles[cpuRateKey(cpuRate)] = await measureViewportScenario(
+          browser,
+          { width: 390, height: 844 },
+          { cpuRate, lateGameAiFixtures },
+        );
+      }
+      const mobile = mobileProfiles['1x'] ?? mobileProfiles[cpuRateKey(mobileCpuRates[0])];
       const report = {
         chunkSizes,
         desktop,
         domain,
         generatedAt: new Date().toISOString(),
         mobile,
+        mobileProfiles,
         previewUrl,
       };
       const summary = buildSummary(report);

@@ -351,7 +351,12 @@ The detailed AI architecture, heuristics, and academic references live in [`src/
 | --- | --- | --- |
 | `npm run ai:selfplay` | self-play dataset JSONL | Generates supervised targets for the optional policy/value model |
 | `npm run ai:variety` | `output/ai/ai-variety-report.{json,md}` | Measures diversity and behavioral quality of AI play |
-| `npm run perf:report` | Playwright + domain performance reports | Benchmarks bundle/runtime performance and core engine speed |
+| `npm run perf:report` | Playwright + domain performance reports | Benchmarks engine speed, root-ordering reuse, weak-device CPU profiles, and imported late-game browser AI turns |
+
+The performance report now covers two complementary layers:
+
+- domain microbenchmarks and root-ordering cache measurements on deterministic `opening`, `turn50`, `turn100`, and `turn200` states;
+- shipped-browser measurements on mobile `1x`, `4x`, and `6x` CPU profiles, including hard-AI replies on imported late-game sessions.
 
 ## Design Principles That Recur Throughout The Code
 

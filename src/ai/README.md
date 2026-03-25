@@ -1,5 +1,11 @@
 # AI Engine
 
+**Copyright (c) 2026 Kostiantyn Stroievskyi. All Rights Reserved.**
+
+No permission is granted to use, copy, modify, merge, publish, distribute, sublicense, or sell copies of this software or any portion of it, for any purpose, without explicit written permission from the copyright holder.
+
+-----
+
 `src/ai/` contains the computer-opponent system for White Maybe Black. It is intentionally separate from React, separate from the Zustand store, and almost entirely separate from browser APIs except for the thin worker and ONNX-loading bridge.
 
 The AI is best understood as a layered decision pipeline:

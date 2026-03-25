@@ -1,5 +1,11 @@
 # Domain Engine
 
+**Copyright (c) 2026 Kostiantyn Stroievskyi. All Rights Reserved.**
+
+No permission is granted to use, copy, modify, merge, publish, distribute, sublicense, or sell copies of this software or any portion of it, for any purpose, without explicit written permission from the copyright holder.
+
+-----
+
 `src/domain/` is the authoritative rules engine for White Maybe Black. It is pure TypeScript, it has no React dependency, and it exists so that every other subsystem can treat game legality as a reusable service instead of embedding rule fragments in multiple places.
 
 That is the most important idea in this folder:

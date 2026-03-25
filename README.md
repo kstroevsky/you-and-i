@@ -1,6 +1,12 @@
 # White Maybe Black
 
-White Maybe Black is a local-first implementation of a two-player abstract board game on a `6x6` board. The repository is not only a playable browser application: it also contains the pure rules engine, a browser-side AI, a persistence/migration layer, offline training code for an optional guidance model, and benchmarking/reporting scripts.
+**Copyright (c) 2026 Kostiantyn Stroievskyi. All Rights Reserved.**
+
+No permission is granted to use, copy, modify, merge, publish, distribute, sublicense, or sell copies of this software or any portion of it, for any purpose, without explicit written permission from the copyright holder.
+
+-----
+
+**White Maybe Black** is a local-first implementation of a two-player abstract board game on a `6x6` board. The repository is not only a playable browser application: it also contains the pure rules engine, a browser-side AI, a persistence/migration layer, offline training code for an optional guidance model, and benchmarking/reporting scripts.
 
 The project is intentionally split so that the game rules remain independent from React, browser storage, and rendering. That separation is the main architectural idea of the codebase: every layer above the rules engine is allowed to orchestrate or present state, but only the domain layer is allowed to define what a legal position or legal move is.
 

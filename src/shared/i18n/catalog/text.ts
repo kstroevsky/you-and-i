@@ -1,6 +1,6 @@
 export const TEXT = {
   english: {
-    appTitle: 'White Maybe Black',
+    appTitle: 'YOUI',
     appTagline: 'Local hot-seat play on one screen.',
     tabGame: 'Game',
     tabInstructions: 'Instructions',
@@ -89,7 +89,7 @@ export const TEXT = {
     gameActive: 'Active',
   },
   russian: {
-    appTitle: 'White Maybe Black',
+    appTitle: 'YOUI',
     appTagline: 'Локальная hot-seat партия на одном экране.',
     tabGame: 'Игра',
     tabInstructions: 'Инструкция',

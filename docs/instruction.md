@@ -1,10 +1,10 @@
 # Precise game instruction - English
 
-## White Maybe Black - Canonical Rulebook
+## YOUI - Canonical Rulebook
 
 ## 1. Overview
 
-**White Maybe Black** is a two-player abstract board game played on a **6x6** board.
+**YOUI** is a two-player abstract board game played on a **6x6** board.
 
 Each player starts with **18 checkers**:
 

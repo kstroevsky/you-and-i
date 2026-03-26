@@ -1,4 +1,4 @@
-# White Maybe Black
+# YOUI
 
 **Copyright (c) 2026 Kostiantyn Stroievskyi. All Rights Reserved.**
 
@@ -6,7 +6,7 @@ No permission is granted to use, copy, modify, merge, publish, distribute, subli
 
 -----
 
-**White Maybe Black** is a local-first implementation of a two-player abstract board game on a `6x6` board. The repository is not only a playable browser application: it also contains the pure rules engine, a browser-side AI, a persistence/migration layer, offline training code for an optional guidance model, and benchmarking/reporting scripts.
+**YOUI** is a local-first implementation of a two-player abstract board game on a `6x6` board. The repository is not only a playable browser application: it also contains the pure rules engine, a browser-side AI, a persistence/migration layer, offline training code for an optional guidance model, and benchmarking/reporting scripts.
 
 The project is intentionally split so that the game rules remain independent from React, browser storage, and rendering. That separation is the main architectural idea of the codebase: every layer above the rules engine is allowed to orchestrate or present state, but only the domain layer is allowed to define what a legal position or legal move is.
 
@@ -175,7 +175,7 @@ This split exists for a reason:
 
 Important versioning detail:
 
-- the browser storage key namespace is `white-maybe-black/session/v4`;
+- the browser storage key namespace is `youi/session/v4`;
 - the persisted envelope schema version is `1`;
 - the wrapped serializable session payload is currently `version: 3`.
 
@@ -279,7 +279,7 @@ That design keeps persistence compact and makes archive hydration deterministic.
 
 ### Interaction state machine
 
-The interaction state is also explicit, because White Maybe Black has a genuinely multi-step move protocol:
+The interaction state is also explicit, because YOUI has a genuinely multi-step move protocol:
 
 | State | Why it exists |
 | --- | --- |

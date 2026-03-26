@@ -3,7 +3,7 @@ import {
   type PersistedSessionEnvelope,
 } from '@/app/store/sessionPersistence';
 
-const ARCHIVE_DB_NAME = 'white-maybe-black';
+const ARCHIVE_DB_NAME = 'youi';
 const ARCHIVE_DB_VERSION = 1;
 const ARCHIVE_STORE_NAME = 'sessionArchive';
 const ACTIVE_RECORD_KEY = 'active';

@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'prompt',
       injectRegister: false,
       manifest: {
-        name: 'White Maybe Black',
-        short_name: 'White Maybe Black',
+        name: 'YOUI',
+        short_name: 'YOUI',
         description: 'Local-first board game with hot-seat play and optional browser AI.',
         display: 'standalone',
         theme_color: '#e8dfd2',
@@ -46,7 +46,7 @@ export default defineConfig({
             urlPattern: ({ url }) => url.pathname === '/models/ai-policy-value.onnx',
             handler: 'CacheFirst',
             options: {
-              cacheName: 'white-maybe-black-ai-model',
+              cacheName: 'youi-ai-model',
               cacheableResponse: {
                 statuses: [200, 206],
               },

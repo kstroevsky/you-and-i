@@ -6,7 +6,7 @@ No permission is granted to use, copy, modify, merge, publish, distribute, subli
 
 -----
 
-`src/domain/` is the authoritative rules engine for White Maybe Black. It is pure TypeScript, it has no React dependency, and it exists so that every other subsystem can treat game legality as a reusable service instead of embedding rule fragments in multiple places.
+`src/domain/` is the authoritative rules engine for YOUI. It is pure TypeScript, it has no React dependency, and it exists so that every other subsystem can treat game legality as a reusable service instead of embedding rule fragments in multiple places.
 
 That is the most important idea in this folder:
 

@@ -6,7 +6,7 @@ No permission is granted to use, copy, modify, merge, publish, distribute, subli
 
 -----
 
-`src/ai/` contains the computer-opponent system for White Maybe Black. It is intentionally separate from React, separate from the Zustand store, and almost entirely separate from browser APIs except for the thin worker and ONNX-loading bridge.
+`src/ai/` contains the computer-opponent system for YOUI. It is intentionally separate from React, separate from the Zustand store, and almost entirely separate from browser APIs except for the thin worker and ONNX-loading bridge.
 
 The AI is best understood as a layered decision pipeline:
 
@@ -309,7 +309,7 @@ The analysis cache (`50_000` positions) exists because these structural features
 
 ### `participation.ts`
 
-This subsystem is specific to White Maybe Black. It tries to keep the AI from becoming technically competent but behaviorally narrow.
+This subsystem is specific to YOUI. It tries to keep the AI from becoming technically competent but behaviorally narrow.
 
 It tracks:
 

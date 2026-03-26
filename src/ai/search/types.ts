@@ -6,7 +6,7 @@ import type {
   AiStrategicIntent,
   AiStrategicTag,
 } from '@/ai/types';
-import type { RuleConfig, TurnAction } from '@/domain';
+import type { Player, RuleConfig, TurnAction } from '@/domain';
 
 export type BoundFlag = 'exact' | 'lower' | 'upper';
 
@@ -15,6 +15,12 @@ export type TranspositionEntry = {
   depth: number;
   flag: BoundFlag;
   score: number;
+};
+
+export type SearchLineEntry = {
+  action: TurnAction;
+  actor: Player;
+  positionKey: string;
 };
 
 export type RootRankedAction = Pick<
@@ -47,6 +53,7 @@ export type SearchContext = {
   policyPriors: Record<string, number> | null;
   pvMoveByDepth: Map<number, TurnAction>;
   rootParticipationState: ParticipationState;
+  rootPlayer: Player;
   rootPreviousOwnAction: TurnAction | null;
   rootPreviousStrategicTags: AiStrategicTag[] | null;
   rootStrategicIntent: AiStrategicIntent;

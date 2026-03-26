@@ -4,13 +4,14 @@ import type { ParticipationState } from '@/ai/participation';
 import type { EngineState, TurnAction } from '@/domain';
 
 import {
-  getGrandparentPositionKey,
   getMovePenalty,
+  getPreviousOwnActionFromLine,
+  getPreviousOwnPositionKeyFromLine,
   rememberCutoffMove,
   TRANSPOSITION_LIMIT,
 } from '@/ai/search/heuristics';
 import { makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
-import type { BoundFlag, SearchContext } from '@/ai/search/types';
+import type { BoundFlag, SearchContext, SearchLineEntry } from '@/ai/search/types';
 import { quiescence } from '@/ai/search/quiescence';
 
 /** Main negamax search with alpha-beta pruning and transposition lookups. */
@@ -20,8 +21,7 @@ export function negamax(
   alpha: number,
   beta: number,
   currentDepth: number,
-  ancestorPositionKeys: string[],
-  ancestorActions: TurnAction[],
+  searchLine: SearchLineEntry[],
   previousActionKey: string | null,
   participationState: ParticipationState,
   context: SearchContext,
@@ -68,8 +68,7 @@ export function negamax(
       alpha,
       beta,
       currentDepth,
-      ancestorPositionKeys,
-      ancestorActions,
+      searchLine,
       previousActionKey,
       participationState,
       context,
@@ -78,9 +77,9 @@ export function negamax(
 
   const orderedMoves = orderMoves(state, state.currentPlayer, context.ruleConfig, context.preset, {
     deadline: context.deadline,
-    grandparentPositionKey: getGrandparentPositionKey(
-      currentDepth,
-      ancestorPositionKeys,
+    grandparentPositionKey: getPreviousOwnPositionKeyFromLine(
+      state.currentPlayer,
+      searchLine,
       context,
     ),
     historyScores: context.historyScores,
@@ -92,8 +91,11 @@ export function negamax(
     previousActionKey,
     pvMove: context.pvMoveByDepth.get(currentDepth),
     repetitionPenalty: context.preset.repetitionPenalty,
-    samePlayerPreviousAction:
-      currentDepth === 0 ? context.rootPreviousOwnAction : ancestorActions.at(-2) ?? null,
+    samePlayerPreviousAction: getPreviousOwnActionFromLine(
+      state.currentPlayer,
+      searchLine,
+      context,
+    ),
     selfUndoPenalty: context.preset.selfUndoPenalty,
     continuationScores: context.continuationScores,
     ttMove: cached?.bestAction,
@@ -115,52 +117,92 @@ export function negamax(
   let searchedFirstChild = false;
 
   for (const entry of orderedMoves) {
-    const nextAncestorPositionKeys = [...ancestorPositionKeys, entry.nextPositionKey];
-    const nextAncestorActions = [...ancestorActions, entry.action];
+    const nextSearchLine = [
+      ...searchLine,
+      {
+        action: entry.action,
+        actor: state.currentPlayer,
+        positionKey: entry.nextPositionKey,
+      },
+    ];
+    const keepsTurn = entry.nextState.currentPlayer === state.currentPlayer;
     let score: number;
 
     if (!searchedFirstChild) {
-      score = -negamax(
-        entry.nextState,
-        depth - 1,
-        -beta,
-        -alpha,
-        currentDepth + 1,
-        nextAncestorPositionKeys,
-        nextAncestorActions,
-        entry.serializedAction,
-        entry.nextParticipationState,
-        context,
-      );
+      score = keepsTurn
+        ? negamax(
+            entry.nextState,
+            depth - 1,
+            alpha,
+            beta,
+            currentDepth + 1,
+            nextSearchLine,
+            entry.serializedAction,
+            entry.nextParticipationState,
+            context,
+          )
+        : -negamax(
+            entry.nextState,
+            depth - 1,
+            -beta,
+            -alpha,
+            currentDepth + 1,
+            nextSearchLine,
+            entry.serializedAction,
+            entry.nextParticipationState,
+            context,
+          );
       searchedFirstChild = true;
     } else {
-      score = -negamax(
-        entry.nextState,
-        depth - 1,
-        -alpha - 1,
-        -alpha,
-        currentDepth + 1,
-        nextAncestorPositionKeys,
-        nextAncestorActions,
-        entry.serializedAction,
-        entry.nextParticipationState,
-        context,
-      );
+      score = keepsTurn
+        ? negamax(
+            entry.nextState,
+            depth - 1,
+            alpha,
+            alpha + 1,
+            currentDepth + 1,
+            nextSearchLine,
+            entry.serializedAction,
+            entry.nextParticipationState,
+            context,
+          )
+        : -negamax(
+            entry.nextState,
+            depth - 1,
+            -alpha - 1,
+            -alpha,
+            currentDepth + 1,
+            nextSearchLine,
+            entry.serializedAction,
+            entry.nextParticipationState,
+            context,
+          );
 
       if (score > alpha && score < beta) {
         context.diagnostics.pvsResearches += 1;
-        score = -negamax(
-          entry.nextState,
-          depth - 1,
-          -beta,
-          -alpha,
-          currentDepth + 1,
-          nextAncestorPositionKeys,
-          nextAncestorActions,
-          entry.serializedAction,
-          entry.nextParticipationState,
-          context,
-        );
+        score = keepsTurn
+          ? negamax(
+              entry.nextState,
+              depth - 1,
+              alpha,
+              beta,
+              currentDepth + 1,
+              nextSearchLine,
+              entry.serializedAction,
+              entry.nextParticipationState,
+              context,
+            )
+          : -negamax(
+              entry.nextState,
+              depth - 1,
+              -beta,
+              -alpha,
+              currentDepth + 1,
+              nextSearchLine,
+              entry.serializedAction,
+              entry.nextParticipationState,
+              context,
+            );
       }
     }
 

@@ -240,7 +240,7 @@ After each legal jump segment:
 
 * the board updates immediately
 * if another legal jump segment exists from the new position, the same player keeps the turn
-* on that continued turn, the player may either continue jumping with the same checker or stack, or use any other legal move
+* on that continued turn, the player may either continue jumping with the same checker or stack, or use any other legal action with that same checker or stack
 * if the chosen move is another jump that also leaves a continuation, the same player keeps the turn again
 * the turn passes only after the player chooses a non-jump move or the latest jump has no continuation
 

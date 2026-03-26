@@ -1,10 +1,14 @@
 import type { OrderedAction } from '@/ai/moveOrdering';
 import { getActionStrategicProfile } from '@/ai/strategy';
 import type { AiRootCandidate, AiStrategicTag } from '@/ai/types';
-import type { EngineState, TurnAction } from '@/domain';
+import type { EngineState, Player, TurnAction } from '@/domain';
 
 import { actionKey } from '@/ai/search/shared';
-import type { RootRankedAction, SearchContext } from '@/ai/search/types';
+import type {
+  RootRankedAction,
+  SearchContext,
+  SearchLineEntry,
+} from '@/ai/search/types';
 
 /** Hard cap keeps the browser-side transposition table memory bounded. */
 export const TRANSPOSITION_LIMIT = 50_000;
@@ -157,15 +161,47 @@ export function getRootPreviousStrategicTags(
   return null;
 }
 
-/** Returns the previous same-side position used as the grandparent anti-undo target. */
-export function getGrandparentPositionKey(
-  currentDepth: number,
-  ancestorPositionKeys: string[],
-  context: SearchContext,
-): string | null {
-  if (currentDepth === 0) {
-    return context.rootSelfUndoPositionKey;
+function getPreviousOwnLineEntry(
+  player: Player,
+  searchLine: SearchLineEntry[],
+): SearchLineEntry | null {
+  for (let index = searchLine.length - 1; index >= 0; index -= 1) {
+    const entry = searchLine[index];
+
+    if (entry?.actor === player) {
+      return entry;
+    }
   }
 
-  return ancestorPositionKeys.at(-2) ?? null;
+  return null;
+}
+
+/** Resolves the latest same-side action from the actor-aware search line. */
+export function getPreviousOwnActionFromLine(
+  player: Player,
+  searchLine: SearchLineEntry[],
+  context: SearchContext,
+): TurnAction | null {
+  const lineEntry = getPreviousOwnLineEntry(player, searchLine);
+
+  if (lineEntry) {
+    return lineEntry.action;
+  }
+
+  return player === context.rootPlayer ? context.rootPreviousOwnAction : null;
+}
+
+/** Resolves the latest same-side position key from the actor-aware search line. */
+export function getPreviousOwnPositionKeyFromLine(
+  player: Player,
+  searchLine: SearchLineEntry[],
+  context: SearchContext,
+): string | null {
+  const lineEntry = getPreviousOwnLineEntry(player, searchLine);
+
+  if (lineEntry) {
+    return lineEntry.positionKey;
+  }
+
+  return player === context.rootPlayer ? context.rootSelfUndoPositionKey : null;
 }

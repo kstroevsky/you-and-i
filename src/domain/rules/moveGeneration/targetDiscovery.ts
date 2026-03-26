@@ -8,6 +8,7 @@ import type {
 } from '@/domain/model/types';
 
 import { getGeneratedActionsForCell } from '@/domain/rules/moveGeneration/actionHandlers';
+import { getForcedActionCoord } from '@/domain/rules/moveGeneration/turnConstraint';
 import { buildTargetMap } from '@/domain/rules/moveGeneration/targetMap';
 import type { TargetMap } from '@/domain/rules/moveGeneration/types';
 
@@ -17,6 +18,12 @@ function getLegalActionsForCellResolved(
   config: RuleConfig,
 ): TurnAction[] {
   if (state.status === 'gameOver') {
+    return [];
+  }
+
+  const forcedCoord = getForcedActionCoord(state);
+
+  if (forcedCoord !== null && forcedCoord !== coord) {
     return [];
   }
 
@@ -46,11 +53,21 @@ export function getLegalActions(
   state: Pick<EngineState, 'board' | 'currentPlayer' | 'pendingJump' | 'status'>,
   config: Partial<RuleConfig> = {},
 ): TurnAction[] {
+  if (state.status === 'gameOver') {
+    return [];
+  }
+
   const resolvedConfig = withRuleDefaults(config);
+  const forcedCoord = getForcedActionCoord(state);
+
+  if (forcedCoord !== null) {
+    return getLegalActionsForCellResolved(state, forcedCoord, resolvedConfig);
+  }
+
   const actions: TurnAction[] = [];
 
   for (const coord of allCoords()) {
-    actions.push(...getLegalActionsForCellResolved(state, coord, resolvedConfig));
+    actions.push(...getGeneratedActionsForCell(state, coord, resolvedConfig));
   }
 
   return actions;

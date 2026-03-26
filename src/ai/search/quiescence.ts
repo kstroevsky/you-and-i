@@ -5,16 +5,19 @@ import type { ParticipationState } from '@/ai/participation';
 import { FRONT_HOME_ROW, HOME_ROWS } from '@/domain/model/constants';
 import { parseCoord } from '@/domain/model/coordinates';
 
-import { getGrandparentPositionKey, getMovePenalty } from '@/ai/search/heuristics';
+import {
+  getMovePenalty,
+  getPreviousOwnActionFromLine,
+  getPreviousOwnPositionKeyFromLine,
+} from '@/ai/search/heuristics';
 import { makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
-import type { SearchContext } from '@/ai/search/types';
+import type { SearchContext, SearchLineEntry } from '@/ai/search/types';
 
 /** Chooses forcing moves only for the quiescence tail below the main search frontier. */
 export function getQuiescenceMoves(
   state: EngineState,
   currentDepth: number,
-  ancestorPositionKeys: string[],
-  ancestorActions: TurnAction[],
+  searchLine: SearchLineEntry[],
   previousActionKey: string | null,
   participationState: ParticipationState,
   context: SearchContext,
@@ -54,9 +57,9 @@ export function getQuiescenceMoves(
   const ordered = orderMoves(state, state.currentPlayer, context.ruleConfig, context.preset, {
     actions: candidateActions,
     deadline: context.deadline,
-    grandparentPositionKey: getGrandparentPositionKey(
-      currentDepth,
-      ancestorPositionKeys,
+    grandparentPositionKey: getPreviousOwnPositionKeyFromLine(
+      state.currentPlayer,
+      searchLine,
       context,
     ),
     historyScores: context.historyScores,
@@ -69,8 +72,11 @@ export function getQuiescenceMoves(
     previousActionKey,
     pvMove: context.pvMoveByDepth.get(currentDepth),
     repetitionPenalty: context.preset.repetitionPenalty,
-    samePlayerPreviousAction:
-      currentDepth === 0 ? context.rootPreviousOwnAction : ancestorActions.at(-2) ?? null,
+    samePlayerPreviousAction: getPreviousOwnActionFromLine(
+      state.currentPlayer,
+      searchLine,
+      context,
+    ),
     selfUndoPenalty: context.preset.selfUndoPenalty,
     continuationScores: context.continuationScores,
     ttMove: context.table.get(makeTableKey(state))?.bestAction,
@@ -95,8 +101,7 @@ export function quiescence(
   alpha: number,
   beta: number,
   currentDepth: number,
-  ancestorPositionKeys: string[],
-  ancestorActions: TurnAction[],
+  searchLine: SearchLineEntry[],
   previousActionKey: string | null,
   participationState: ParticipationState,
   context: SearchContext,
@@ -126,8 +131,7 @@ export function quiescence(
   const forcingMoves = getQuiescenceMoves(
     state,
     currentDepth,
-    ancestorPositionKeys,
-    ancestorActions,
+    searchLine,
     previousActionKey,
     participationState,
     context,
@@ -140,17 +144,36 @@ export function quiescence(
   let bestScore = standPat;
 
   for (const entry of forcingMoves) {
-    let score = -quiescence(
-      entry.nextState,
-      -beta,
-      -alpha,
-      currentDepth + 1,
-      [...ancestorPositionKeys, entry.nextPositionKey],
-      [...ancestorActions, entry.action],
-      entry.serializedAction,
-      entry.nextParticipationState,
-      context,
-    );
+    const nextSearchLine = [
+      ...searchLine,
+      {
+        action: entry.action,
+        actor: state.currentPlayer,
+        positionKey: entry.nextPositionKey,
+      },
+    ];
+    const keepsTurn = entry.nextState.currentPlayer === state.currentPlayer;
+    let score = keepsTurn
+      ? quiescence(
+          entry.nextState,
+          alpha,
+          beta,
+          currentDepth + 1,
+          nextSearchLine,
+          entry.serializedAction,
+          entry.nextParticipationState,
+          context,
+        )
+      : -quiescence(
+          entry.nextState,
+          -beta,
+          -alpha,
+          currentDepth + 1,
+          nextSearchLine,
+          entry.serializedAction,
+          entry.nextParticipationState,
+          context,
+        );
 
     score -= getMovePenalty(entry, context);
 

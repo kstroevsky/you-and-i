@@ -15,6 +15,7 @@ import {
   resolveJumpPath,
 } from '@/domain/rules/moveGeneration/jump';
 import { getLegalActionsForCell } from '@/domain/rules/moveGeneration/targetDiscovery';
+import { getActingCoord, getForcedActionCoord } from '@/domain/rules/moveGeneration/turnConstraint';
 
 /** Lightweight structural equality for action matching in validator checks. */
 function actionsEqual(left: TurnAction, right: TurnAction): boolean {
@@ -88,6 +89,16 @@ export function validateAction(
     return { valid: false, reason: 'The game is already over.' };
   }
 
+  const forcedCoord = getForcedActionCoord(state);
+  const actingCoord = getActingCoord(action);
+
+  if (forcedCoord !== null && forcedCoord !== actingCoord) {
+    return {
+      valid: false,
+      reason: `Only ${forcedCoord} may act during jump continuation.`,
+    };
+  }
+
   switch (action.type) {
     case 'manualUnfreeze': {
       if (!isFrozenSingle(state.board, action.coord)) {
@@ -98,7 +109,13 @@ export function validateAction(
         return { valid: false, reason: 'Only the owner may manually unfreeze a checker.' };
       }
 
-      return { valid: true };
+      const legalAction = getLegalActionsForCell(state, action.coord, resolvedConfig).find((candidate) =>
+        actionsEqual(candidate, action),
+      );
+
+      return legalAction
+        ? { valid: true }
+        : { valid: false, reason: `${action.coord} cannot be manually unfrozen right now.` };
     }
     case 'jumpSequence': {
       const sourceValidation = validateCommonSource(state, action.source, state.currentPlayer);

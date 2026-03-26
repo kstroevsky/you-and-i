@@ -142,6 +142,7 @@ export function chooseComputerAction({
     preset,
     pvMoveByDepth: new Map<number, TurnAction>(),
     rootParticipationState,
+    rootPlayer: state.currentPlayer,
     rootPreviousOwnAction: getRootPreviousOwnAction(state),
     rootPreviousStrategicTags: getRootPreviousStrategicTags(state),
     rootStrategicIntent: strategicIntent,
@@ -329,18 +330,42 @@ export function chooseComputerAction({
     for (const entry of orderedMoves) {
       throwIfTimedOut(now, deadline);
 
-      let score = -negamax(
-        entry.nextState,
-        depth - 1,
-        -betaWindow,
-        -alphaWindow,
-        1,
-        [rootPositionKey, entry.nextPositionKey],
-        [entry.action],
-        entry.serializedAction,
-        entry.nextParticipationState,
-        context,
-      );
+      const keepsTurn = entry.nextState.currentPlayer === state.currentPlayer;
+      let score = keepsTurn
+        ? negamax(
+            entry.nextState,
+            depth - 1,
+            alphaWindow,
+            betaWindow,
+            1,
+            [
+              {
+                action: entry.action,
+                actor: state.currentPlayer,
+                positionKey: entry.nextPositionKey,
+              },
+            ],
+            entry.serializedAction,
+            entry.nextParticipationState,
+            context,
+          )
+        : -negamax(
+            entry.nextState,
+            depth - 1,
+            -betaWindow,
+            -alphaWindow,
+            1,
+            [
+              {
+                action: entry.action,
+                actor: state.currentPlayer,
+                positionKey: entry.nextPositionKey,
+              },
+            ],
+            entry.serializedAction,
+            entry.nextParticipationState,
+            context,
+          );
 
       score -= getMovePenalty(entry, context);
 

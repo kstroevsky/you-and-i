@@ -39,6 +39,19 @@ export const INTERACTION_COPY: Record<Language, InteractionCopy> = {
       `Передайте устройство: ходят ${nextPlayer.toLowerCase()}.`,
     gameOver: 'Игра окончена.',
   },
+  ukrainian: {
+    idle: 'Оберіть шашку або контрольовану гірку.',
+    pieceSelected: (source) => `Обрана ${source}. Тепер оберіть тип ходу.`,
+    jumpFollowUp: (source) =>
+      `Ланцюжок стрибків готовий із ${source}. Продовжуйте цією ж шашкою або гіркою.`,
+    choosingTarget: (action, source) => `Оберіть ціль для «${action}» із ${source}.`,
+    buildingJumpChain: (source) =>
+      `Оберіть наступну ціль стрибка із ${source}. Кожен клік застосовує одну ділянку одразу.`,
+    turnResolved: (nextPlayer) => `Хід завершено. Далі ходять ${nextPlayer.toLowerCase()}.`,
+    passingDevice: (nextPlayer) =>
+      `Передайте пристрій: ходять ${nextPlayer.toLowerCase()}.`,
+    gameOver: 'Гру завершено.',
+  },
 };
 
 export type VictoryCopy = {
@@ -116,6 +129,31 @@ export const VICTORY_COPY: Record<Language, VictoryCopy> = {
     threefoldDraw: 'Ничья по трёхкратному повторению',
     stalemateDraw: 'Ничья по блокировке',
   },
+  ukrainian: {
+    none: TEXT.ukrainian.gameActive,
+    homeField: (winner) => `${winner} перемогли через своє поле`,
+    sixStacks: (winner) => `${winner} перемогли шістьма гірками`,
+    threefoldTiebreakWin: (
+      winner,
+      ownFieldWhite,
+      ownFieldBlack,
+      stacksWhite,
+      stacksBlack,
+      decidedBy,
+    ) =>
+      `${winner} перемогли за тай-брейком після триразового повторення (${decidedBy === 'checkers' ? 'рішення за шашками на своєму полі' : 'рішення за завершеними домашніми гірками'}). Шашки на своєму полі: білі ${ownFieldWhite}, чорні ${ownFieldBlack}. Завершені домашні гірки: білі ${stacksWhite}, чорні ${stacksBlack}.`,
+    stalemateTiebreakWin: (
+      winner,
+      ownFieldWhite,
+      ownFieldBlack,
+      stacksWhite,
+      stacksBlack,
+      decidedBy,
+    ) =>
+      `${winner} перемогли за тай-брейком при блокуванні (${decidedBy === 'checkers' ? 'рішення за шашками на своєму полі' : 'рішення за завершеними домашніми гірками'}). Шашки на своєму полі: білі ${ownFieldWhite}, чорні ${ownFieldBlack}. Завершені домашні гірки: білі ${stacksWhite}, чорні ${stacksBlack}.`,
+    threefoldDraw: 'Нічия за триразовим повторенням',
+    stalemateDraw: 'Нічия за блокуванням',
+  },
 };
 
 export type ResultTitleCopy = {
@@ -134,6 +172,11 @@ export const RESULT_TITLE_COPY: Record<Language, ResultTitleCopy> = {
     winner: (winner) => `${winner} победили`,
     draw: 'Ничья',
     gameOver: 'Игра окончена',
+  },
+  ukrainian: {
+    winner: (winner) => `${winner} перемогли`,
+    draw: 'Нічия',
+    gameOver: 'Гру завершено',
   },
 };
 
@@ -158,6 +201,13 @@ export const MISC_COPY: Record<Language, MiscCopy> = {
     passOverlayLabel: (player) => `Передайте устройство: ${player.toLowerCase()}.`,
     historySummary: (count, cursor) => `Всего: ${count} · Позиция истории: ${cursor}`,
     tooltipMoreAbout: (title) => `Подробнее: ${title}`,
+    autoPassPrefix: ' | автопас: ',
+  },
+  ukrainian: {
+    turnBanner: (player) => `${player} ходять`,
+    passOverlayLabel: (player) => `Передайте пристрій: ${player.toLowerCase()}.`,
+    historySummary: (count, cursor) => `Всього: ${count} · Позиція історії: ${cursor}`,
+    tooltipMoreAbout: (title) => `Детальніше: ${title}`,
     autoPassPrefix: ' | автопас: ',
   },
 };

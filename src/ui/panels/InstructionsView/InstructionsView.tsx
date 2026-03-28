@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import instructionEn from '../../../../docs/instruction.md?raw';
 import instructionRu from '../../../../docs/instruction.ru.md?raw';
+import instructionUa from '../../../../docs/instruction.ua.md?raw';
 
 import { text } from '@/shared/i18n/catalog';
 import { cx } from '@/shared/utils/cx';
@@ -114,6 +115,7 @@ function renderInline(textValue: string): ReactNode[] {
 const INSTRUCTION_BLOCKS = {
   english: parseMarkdown(instructionEn),
   russian: parseMarkdown(instructionRu),
+  ukrainian: parseMarkdown(instructionUa),
 } as const;
 
 type InstructionsViewProps = {
@@ -121,7 +123,7 @@ type InstructionsViewProps = {
 };
 
 export function InstructionsView({ language }: InstructionsViewProps) {
-  const blocks = INSTRUCTION_BLOCKS[language];
+  const blocks = INSTRUCTION_BLOCKS[language === 'ukrainian' ? 'english' : language];
 
   return (
     <section className={styles.root}>

@@ -172,7 +172,7 @@ export function assertPreferences(value: unknown): AppPreferences {
         ? value.passDeviceOverlayEnabled
         : true,
     language:
-      value.language === 'english' || value.language === 'russian'
+      value.language === 'english' || value.language === 'russian' || value.language === 'ukrainian'
         ? value.language
         : legacyLanguageMode === 'english'
           ? 'english'

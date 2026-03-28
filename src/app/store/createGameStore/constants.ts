@@ -4,7 +4,7 @@ import type { AppPreferences } from '@/shared/types/session';
 /** Fresh-store user defaults. */
 export const DEFAULT_PREFERENCES: AppPreferences = {
   passDeviceOverlayEnabled: true,
-  language: 'russian',
+  language: 'english',
 };
 
 /** Legacy rule snapshot used to detect the old default bundle during migration. */

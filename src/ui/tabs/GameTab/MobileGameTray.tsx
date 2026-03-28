@@ -12,7 +12,7 @@ import styles from './style.module.scss';
 
 export type MobileTrayTab = 'history' | 'info';
 
-const TABS: MobileTrayTab[] = ['history', 'info'];
+const TABS: MobileTrayTab[] = ['info', 'history'];
 
 function getTabLabel(language: Language, tab: MobileTrayTab): string {
   switch (tab) {
@@ -25,7 +25,7 @@ function getTabLabel(language: Language, tab: MobileTrayTab): string {
 
 export function MobileGameTray() {
   const trayId = useId();
-  const [activeTab, setActiveTab] = useState<MobileTrayTab>('history');
+  const [activeTab, setActiveTab] = useState<MobileTrayTab>('info');
   const { language } = useGameStore(
     useShallow((state) => ({
       language: state.preferences.language,

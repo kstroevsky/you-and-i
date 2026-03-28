@@ -87,7 +87,7 @@ describe('GameTab compact layout', () => {
     renderGameTab();
 
     expect(screen.queryByRole('tab', { name: 'Ходы' })).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'История' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Инфо' })).toHaveAttribute('aria-selected', 'true');
 
     await user.click(await screen.findByRole('button', { name: 'Клетка A1' }));
 
@@ -99,6 +99,10 @@ describe('GameTab compact layout', () => {
     const user = userEvent.setup();
     renderGameTab();
 
+    expect(screen.getByRole('table', { name: 'Подсчёт' })).toBeInTheDocument();
+    
+    await user.click(screen.getByRole('tab', { name: 'История' }));
+    
     expect(screen.queryByRole('table', { name: 'Подсчёт' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Инфо' }));
@@ -112,7 +116,7 @@ describe('GameTab compact layout', () => {
     const user = userEvent.setup();
     renderGameTab();
 
-    await user.click(screen.getByRole('tab', { name: 'Инфо' }));
+    expect(screen.getByRole('tab', { name: 'Инфо' })).toHaveAttribute('aria-selected', 'true');
 
     expect(await screen.findByRole('heading', { name: 'Параметры матча' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Hot-seat' })).toBeInTheDocument();

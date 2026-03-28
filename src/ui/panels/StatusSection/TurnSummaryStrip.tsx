@@ -4,6 +4,7 @@ import type { Victory } from '@/domain';
 import { useGameStore } from '@/app/providers/GameStoreProvider';
 import type { GlossaryTermId } from '@/features/glossary/terms';
 import { describeInteraction, formatTurnBanner, formatVictory, playerLabel, text } from '@/shared/i18n/catalog';
+import type { Language } from '@/shared/i18n/types';
 import { Button } from '@/ui/primitives/Button';
 import { GlossaryTooltip } from '@/ui/tooltips/GlossaryTooltip';
 
@@ -14,7 +15,7 @@ type TurnSummaryStripProps = {
 };
 
 function getDifficultyLabel(
-  language: 'english' | 'russian',
+  language: Language,
   difficulty: 'easy' | 'medium' | 'hard',
 ): string {
   switch (difficulty) {

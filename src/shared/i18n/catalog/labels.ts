@@ -10,6 +10,10 @@ export const PLAYER_LABELS: Record<Language, Record<Player, string>> = {
     white: 'Белые',
     black: 'Чёрные',
   },
+  ukrainian: {
+    white: 'Білі',
+    black: 'Чорні',
+  },
 };
 
 export const ACTION_LABELS: Record<Language, Record<ActionKind, string>> = {
@@ -30,5 +34,14 @@ export const ACTION_LABELS: Record<Language, Record<ActionKind, string>> = {
     splitOneFromStack: 'Сход 1',
     splitTwoFromStack: 'Сход 2',
     friendlyStackTransfer: 'Перенос к своей',
+  },
+  ukrainian: {
+    jumpSequence: 'Стрибок',
+    manualUnfreeze: 'Розморозка',
+    climbOne: 'Сходження',
+    moveSingleToEmpty: 'Крок на порожню',
+    splitOneFromStack: 'Схід 1',
+    splitTwoFromStack: 'Схід 2',
+    friendlyStackTransfer: 'Перенесення до своєї',
   },
 };

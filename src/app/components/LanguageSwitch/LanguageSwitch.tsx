@@ -24,6 +24,12 @@ export function LanguageSwitch({ language, onChange }: LanguageSwitchProps) {
       >
         {text(language, 'languageEnglish')}
       </Button>
+      <Button
+        variant={language === 'ukrainian' ? 'active' : 'ghost'}
+        onClick={() => onChange('ukrainian')}
+      >
+        {text(language, 'languageUkrainian')}
+      </Button>
     </div>
   );
 }

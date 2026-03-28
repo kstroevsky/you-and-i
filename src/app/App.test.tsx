@@ -100,7 +100,7 @@ describe('App', () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole('button', { name: 'English' }));
+    await user.click(await screen.findByRole('button', { name: 'EN' }));
 
     expect(screen.getByText('Match setup')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Cell A1' }, { timeout: 6000 })).toBeInTheDocument();

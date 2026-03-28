@@ -1,6 +1,14 @@
 # AI Variety Report
 
-Generated at: 2026-03-26T21:37:02.032Z
+Generated at: 2026-03-27T23:29:16.313Z
+
+This file is a generated report artifact from `npm run ai:variety`.
+
+Methodology:
+- Each difficulty is evaluated with the same mirrored self-play harness used by `runAiVarietySuite()` in `src/ai/test/metrics.ts`.
+- The `Status` column compares the measured value to the target bands in `src/ai/test/fixtures/ai-variety-target-bands.json`.
+- `good`, `warn`, and `bad` are directional: some metrics want higher values, others want lower values.
+- The `Regressions` section compares the current summary against the checked-in baseline file in `src/ai/test/fixtures/ai-variety-baselines.json`.
 
 ## easy
 

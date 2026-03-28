@@ -99,6 +99,14 @@ function buildMarkdown(
     '',
     `Generated at: ${new Date().toISOString()}`,
     '',
+    'This file is a generated report artifact from `npm run ai:variety`.',
+    '',
+    'Methodology:',
+    '- Each difficulty is evaluated with the same mirrored self-play harness used by `runAiVarietySuite()` in `src/ai/test/metrics.ts`.',
+    '- The `Status` column compares the measured value to the target bands in `src/ai/test/fixtures/ai-variety-target-bands.json`.',
+    '- `good`, `warn`, and `bad` are directional: some metrics want higher values, others want lower values.',
+    '- The `Regressions` section compares the current summary against the checked-in baseline file in `src/ai/test/fixtures/ai-variety-baselines.json`.',
+    '',
   ];
 
   for (const difficulty of ['easy', 'medium', 'hard'] as const) {

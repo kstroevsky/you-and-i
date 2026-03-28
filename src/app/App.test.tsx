@@ -102,7 +102,7 @@ describe('App', () => {
 
     await user.click(await screen.findByRole('button', { name: 'English' }));
 
-    expect(screen.getByText('Local hot-seat play on one screen.')).toBeInTheDocument();
+    expect(screen.getByText('Match setup')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Cell A1' }, { timeout: 6000 })).toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'Instructions' }));

@@ -676,6 +676,12 @@ function buildSummary(report) {
     '',
     `Generated: ${report.generatedAt}`,
     '',
+    'This file is a generated report artifact from `npm run perf:report`.',
+    '- Browser timings come from `scripts/perf-report.mjs` against a local `vite preview` build.',
+    '- Domain timings come from `scripts/domainPerformance.report.ts` and are merged into this summary.',
+    '- CPU throttle profiles use Chrome DevTools `Emulation.setCPUThrottlingRate` with `1x` meaning unthrottled, and `4x` / `6x` meaning progressively slower simulated devices.',
+    '- `GOOD`, `WARN`, and `BAD` in the summary are repository-specific guardrails encoded in `scripts/perf-report.mjs`, not universal SLAs.',
+    '',
     '## Summary',
     ...checks.map((check) => `- [${check.status.toUpperCase()}] ${check.label}: ${check.value}`),
     '',
@@ -727,10 +733,6 @@ function buildSummary(report) {
           `- ${entry.label}: baseline ${entry.baselineMs}ms, optimized ${entry.optimizedMs}ms, gain ${entry.gainMs}ms (${entry.gainPercent}%)`,
         )
       : ['- Root-ordering cache benchmark was not provided by the domain report.']),
-    '',
-    '## Lifecycle',
-    '- Store lifecycle now terminates AI workers on `visibilitychange:hidden`, `pagehide`, and store destroy/unmount.',
-    '- Covered by store lifecycle tests in `createGameStore.test.ts`.',
   ];
 
   return {

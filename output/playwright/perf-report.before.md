@@ -2,6 +2,10 @@
 
 Generated: 2026-03-26T19:58:14.587Z
 
+This file is an archival baseline snapshot paired with `output/playwright/perf-report.before.json`.
+- It is kept for comparison against newer generated reports.
+- The numbers below are generated measurements, not hand-maintained prose.
+
 ## Summary
 - [GOOD] Desktop FCP: 264ms
 - [GOOD] Mobile FCP: 36ms

@@ -1,6 +1,10 @@
 import { createInitialState, createUndoFrame, restoreGameState, withRuleDefaults } from '@/domain';
 import { DEFAULT_MATCH_SETTINGS } from '@/shared/constants/match';
-import type { AppPreferences, SerializableSession } from '@/shared/types/session';
+import type {
+  AiBehaviorProfile,
+  AppPreferences,
+  SerializableSession,
+} from '@/shared/types/session';
 import type { GameState, RuleConfig, TurnRecord } from '@/domain';
 
 import { DEFAULT_PREFERENCES } from '@/app/store/createGameStore/constants';
@@ -20,16 +24,18 @@ export function buildSession(
   ruleConfig: RuleConfig,
   preferences: AppPreferences,
   matchSettings: typeof DEFAULT_MATCH_SETTINGS,
+  aiBehaviorProfile: AiBehaviorProfile | null,
   present: GameState,
   turnLog: TurnRecord[],
   past: SessionSlices['past'],
   future: SessionSlices['future'],
 ): SerializableSession {
   return {
-    version: 3,
+    version: 4,
     ruleConfig,
     preferences,
     matchSettings,
+    aiBehaviorProfile,
     turnLog,
     present: createUndoFrame(present),
     past,
@@ -42,7 +48,16 @@ export function getDefaultSession(): SerializableSession {
   const ruleConfig = withRuleDefaults();
   const present = createInitialState(ruleConfig);
 
-  return buildSession(ruleConfig, DEFAULT_PREFERENCES, DEFAULT_MATCH_SETTINGS, present, [], [], []);
+  return buildSession(
+    ruleConfig,
+    DEFAULT_PREFERENCES,
+    DEFAULT_MATCH_SETTINGS,
+    null,
+    present,
+    [],
+    [],
+    [],
+  );
 }
 
 /** Rehydrates the runtime store fields from one serialized session snapshot. */
@@ -51,6 +66,7 @@ export function createRuntimeState(session: SerializableSession): Pick<
   | 'ruleConfig'
   | 'preferences'
   | 'matchSettings'
+  | 'aiBehaviorProfile'
   | 'setupMatchSettings'
   | 'gameState'
   | 'turnLog'
@@ -65,6 +81,7 @@ export function createRuntimeState(session: SerializableSession): Pick<
     ruleConfig: session.ruleConfig,
     preferences: session.preferences,
     matchSettings: session.matchSettings,
+    aiBehaviorProfile: session.aiBehaviorProfile,
     setupMatchSettings: session.matchSettings,
     gameState,
     turnLog,
@@ -78,13 +95,21 @@ export function createRuntimeState(session: SerializableSession): Pick<
 export function getSessionSlices(
   state: Pick<
     GameStoreData,
-    'ruleConfig' | 'preferences' | 'matchSettings' | 'gameState' | 'turnLog' | 'past' | 'future'
+    | 'ruleConfig'
+    | 'preferences'
+    | 'matchSettings'
+    | 'aiBehaviorProfile'
+    | 'gameState'
+    | 'turnLog'
+    | 'past'
+    | 'future'
   >,
 ): SessionSlices {
   return {
     ruleConfig: state.ruleConfig,
     preferences: state.preferences,
     matchSettings: state.matchSettings,
+    aiBehaviorProfile: state.aiBehaviorProfile,
     gameState: state.gameState,
     turnLog: state.turnLog,
     past: state.past,
@@ -98,6 +123,7 @@ export function buildSessionFromSlices(nextState: SessionSlices): SerializableSe
     nextState.ruleConfig,
     nextState.preferences,
     nextState.matchSettings,
+    nextState.aiBehaviorProfile,
     nextState.gameState,
     nextState.turnLog,
     nextState.past,

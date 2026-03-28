@@ -50,7 +50,13 @@ flowchart LR
 At runtime the application supports two match modes:
 
 - `hotSeat`: two humans share one device, optionally using the pass-device overlay between turns;
-- `computer`: the store sends an immutable engine snapshot to a worker, the worker searches for one move, and the store applies only the latest non-stale result.
+- `computer`: the store sends an immutable engine snapshot plus a hidden per-match AI behavior profile to a worker, the worker searches for one move, and the store applies only the latest non-stale result.
+
+Computer mode now has three product-facing AI traits that are intentionally not separate UI toggles:
+
+- a hidden per-match persona (`expander`, `hunter`, or `builder`) so different games do not all feel strategically identical;
+- dynamic draw aversion, so equal-or-better positions do not treat sterile draws as neutral outcomes;
+- risk escalation under stagnation or once `moveNumber >= 70`, so very flat games become more decisive without overriding forced tactics.
 
 The rules revolve around six recurring ideas:
 
@@ -101,8 +107,9 @@ The application shell itself lives in [`src/app/App/App.tsx`](./src/app/App/App.
 | `StateSnapshot` | [`src/domain/model/types.ts`](./src/domain/model/types.ts) | serialization-safe and history-safe position snapshot without live history arrays |
 | `TurnRecord` | [`src/domain/model/types.ts`](./src/domain/model/types.ts) | one committed move plus before/after snapshots, auto-passes, and canonical post-move hash |
 | `UndoFrame` | [`src/shared/types/session.ts`](./src/shared/types/session.ts) | lightweight history cursor used by undo/redo and persistence compaction |
+| `AiBehaviorProfile` | [`src/shared/types/session.ts`](./src/shared/types/session.ts) | hidden persisted persona that keeps a computer opponent's style stable across reloads in one match |
 | `InteractionState` | [`src/shared/types/session.ts`](./src/shared/types/session.ts) | store-owned UI protocol: idle, piece selection, targeting, jump follow-up, pass overlay, or game over |
-| `AiSearchResult` | [`src/ai/types.ts`](./src/ai/types.ts) | one complete AI decision, including chosen move, fallback mode, diagnostics, and root candidates |
+| `AiSearchResult` | [`src/ai/types.ts`](./src/ai/types.ts) | one complete AI decision, including chosen move, fallback mode, diagnostics, root candidates, active risk mode, and persona id |
 
 ## Runtime Boundaries
 
@@ -125,10 +132,10 @@ The AI is search-first, not model-first. The browser move chooser is built from:
 - negamax with alpha-beta pruning;
 - principal-variation-style null-window re-search;
 - quiescence search;
-- domain-specific move ordering, strategic analysis, and participation heuristics;
+- domain-specific move ordering, strategic analysis, participation heuristics, hidden personas, and stagnation-aware risk shaping;
 - optional policy priors from a small residual policy/value network.
 
-The neural model is guidance only. The current runtime uses policy priors for ordering and exposes `valueEstimate` for diagnostics, but it does **not** inject the value head into [`evaluateState()`](./src/ai/evaluation.ts).
+The neural model is guidance only. The current runtime uses policy priors for ordering and exposes `valueEstimate` for diagnostics, but it does **not** inject the value head into [`evaluateState()`](./src/ai/evaluation.ts). In risk-escalation modes the engine attenuates policy-prior weight and prefers heuristic strategic intent over stale-safe model intent, because the product goal becomes decisive play rather than merely reproducing the baseline policy. The first few opening plies also deliberately reduce root prior weight when a hidden persona is active, so the safe opening band can split into different styles instead of collapsing back to one model-favored move every game.
 
 ### Store And UI
 
@@ -148,7 +155,9 @@ The runtime persistence contract has two layers with different version numbers:
 
 - browser storage key namespace: `youi/session/v4`
 - app-level persisted envelope version: `1`
-- embedded serializable session version: `3`
+- embedded serializable session version: `4`
+
+Session `v4` adds persisted `aiBehaviorProfile` beside `matchSettings`. Older `v1`, `v2`, and `v3` payloads are still accepted and normalized into `SerializableSessionV4` with `aiBehaviorProfile: null`, so imports remain backward-compatible while new computer matches keep their hidden style across reloads.
 
 Boot is assembled through the exact runtime path:
 
@@ -169,6 +178,7 @@ Files under `output/` are generated artifacts, not canonical prose documentation
 Key commands:
 
 - `npm run ai:selfplay`: generate training/self-play JSONL
+- `npm run ai:stage-variety`: generate opening-versus-late-stage AI variety reports
 - `npm run ai:variety`: generate AI variety reports
 - `npm run perf:report`: generate browser and domain performance reports
 - `npm run perf:compare`: compare historical and current performance JSON snapshots

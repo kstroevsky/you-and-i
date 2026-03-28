@@ -61,7 +61,14 @@ export function getComputerUndoTarget(state: GameStoreState): number {
 export function getHistoryStepData(
   state: Pick<
     GameStoreData,
-    'ruleConfig' | 'preferences' | 'matchSettings' | 'gameState' | 'turnLog' | 'past' | 'future'
+    | 'ruleConfig'
+    | 'preferences'
+    | 'matchSettings'
+    | 'aiBehaviorProfile'
+    | 'gameState'
+    | 'turnLog'
+    | 'past'
+    | 'future'
   >,
   direction: 'backward' | 'forward',
   getBoardDerivation: (gameState: GameStoreData['gameState'], ruleConfig: GameStoreData['ruleConfig']) => Pick<
@@ -73,6 +80,7 @@ export function getHistoryStepData(
   | 'ruleConfig'
   | 'preferences'
   | 'matchSettings'
+  | 'aiBehaviorProfile'
   | 'gameState'
   | 'turnLog'
   | 'past'
@@ -96,6 +104,7 @@ export function getHistoryStepData(
       ruleConfig: state.ruleConfig,
       preferences: state.preferences,
       matchSettings: state.matchSettings,
+      aiBehaviorProfile: state.aiBehaviorProfile,
       gameState: previousGameState,
       turnLog: state.turnLog,
       past: nextPast,
@@ -119,6 +128,7 @@ export function getHistoryStepData(
     ruleConfig: state.ruleConfig,
     preferences: state.preferences,
     matchSettings: state.matchSettings,
+    aiBehaviorProfile: state.aiBehaviorProfile,
     gameState: nextGameState,
     turnLog: state.turnLog,
     past: nextPast,

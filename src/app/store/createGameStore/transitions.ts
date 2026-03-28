@@ -129,6 +129,7 @@ export function createStoreTransitions({
       ruleConfig: state.ruleConfig,
       preferences: state.preferences,
       matchSettings: state.matchSettings,
+      aiBehaviorProfile: state.aiBehaviorProfile,
       gameState: nextGameState,
       turnLog: nextTurnLog,
       past: nextPast,

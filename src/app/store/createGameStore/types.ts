@@ -12,6 +12,7 @@ import type {
 } from '@/domain';
 import type {
   AppPreferences,
+  AiBehaviorProfile,
   InteractionState,
   MatchSettings,
   SerializableSession,
@@ -41,6 +42,7 @@ export type GameStoreData = {
   ruleConfig: RuleConfig;
   preferences: AppPreferences;
   matchSettings: MatchSettings;
+  aiBehaviorProfile: AiBehaviorProfile | null;
   setupMatchSettings: MatchSettings;
   gameState: GameState;
   turnLog: TurnRecord[];
@@ -98,7 +100,14 @@ export type StoreOptions = {
 /** Session fields persisted after every structural state transition. */
 export type SessionSlices = Pick<
   GameStoreData,
-  'ruleConfig' | 'preferences' | 'matchSettings' | 'gameState' | 'turnLog' | 'past' | 'future'
+  | 'ruleConfig'
+  | 'preferences'
+  | 'matchSettings'
+  | 'aiBehaviorProfile'
+  | 'gameState'
+  | 'turnLog'
+  | 'past'
+  | 'future'
 >;
 
 /** Synchronous boot result before async archive hydration begins. */

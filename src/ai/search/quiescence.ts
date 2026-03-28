@@ -56,6 +56,7 @@ export function getQuiescenceMoves(
 
   const ordered = orderMoves(state, state.currentPlayer, context.ruleConfig, context.preset, {
     actions: candidateActions,
+    behaviorProfile: context.behaviorProfile,
     deadline: context.deadline,
     grandparentPositionKey: getPreviousOwnPositionKeyFromLine(
       state.currentPlayer,
@@ -72,6 +73,7 @@ export function getQuiescenceMoves(
     previousActionKey,
     pvMove: context.pvMoveByDepth.get(currentDepth),
     repetitionPenalty: context.preset.repetitionPenalty,
+    riskMode: context.riskMode,
     samePlayerPreviousAction: getPreviousOwnActionFromLine(
       state.currentPlayer,
       searchLine,
@@ -114,8 +116,13 @@ export function quiescence(
     state,
     state.currentPlayer,
     context.ruleConfig,
-    participationState,
-    context.preset,
+    {
+      behaviorProfile: context.behaviorProfile,
+      diagnostics: context.diagnostics,
+      participationState,
+      preset: context.preset,
+      riskMode: context.riskMode,
+    },
   );
 
   if (currentDepth >= context.quiescenceDepthLimit) {

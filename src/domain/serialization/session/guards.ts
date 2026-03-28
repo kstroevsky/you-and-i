@@ -14,7 +14,11 @@ import type {
   Victory,
 } from '@/domain/model/types';
 import { DEFAULT_MATCH_SETTINGS } from '@/shared/constants/match';
-import type { AppPreferences, MatchSettings } from '@/shared/types/session';
+import type {
+  AiBehaviorProfile,
+  AppPreferences,
+  MatchSettings,
+} from '@/shared/types/session';
 import { isRecord } from '@/shared/utils/collections';
 
 const COORD_SET = new Set(allCoords());
@@ -197,6 +201,26 @@ export function assertMatchSettings(value: unknown): MatchSettings {
       value.aiDifficulty === 'hard'
         ? value.aiDifficulty
         : DEFAULT_MATCH_SETTINGS.aiDifficulty,
+  };
+}
+
+/** Runtime guard for the hidden per-match AI persona persisted with computer games. */
+export function assertAiBehaviorProfile(value: unknown): AiBehaviorProfile | null {
+  if (value == null) {
+    return null;
+  }
+
+  if (
+    !isRecord(value) ||
+    typeof value.seed !== 'string' ||
+    (value.id !== 'expander' && value.id !== 'hunter' && value.id !== 'builder')
+  ) {
+    throw new Error('Invalid AI behavior profile.');
+  }
+
+  return {
+    id: value.id,
+    seed: value.seed,
   };
 }
 

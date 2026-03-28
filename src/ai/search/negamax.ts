@@ -57,8 +57,13 @@ export function negamax(
       state,
       state.currentPlayer,
       context.ruleConfig,
-      participationState,
-      context.preset,
+      {
+        behaviorProfile: context.behaviorProfile,
+        diagnostics: context.diagnostics,
+        participationState,
+        preset: context.preset,
+        riskMode: context.riskMode,
+      },
     );
   }
 
@@ -76,6 +81,7 @@ export function negamax(
   }
 
   const orderedMoves = orderMoves(state, state.currentPlayer, context.ruleConfig, context.preset, {
+    behaviorProfile: context.behaviorProfile,
     deadline: context.deadline,
     grandparentPositionKey: getPreviousOwnPositionKeyFromLine(
       state.currentPlayer,
@@ -91,6 +97,7 @@ export function negamax(
     previousActionKey,
     pvMove: context.pvMoveByDepth.get(currentDepth),
     repetitionPenalty: context.preset.repetitionPenalty,
+    riskMode: context.riskMode,
     samePlayerPreviousAction: getPreviousOwnActionFromLine(
       state.currentPlayer,
       searchLine,
@@ -107,8 +114,13 @@ export function negamax(
       state,
       state.currentPlayer,
       context.ruleConfig,
-      participationState,
-      context.preset,
+      {
+        behaviorProfile: context.behaviorProfile,
+        diagnostics: context.diagnostics,
+        participationState,
+        preset: context.preset,
+        riskMode: context.riskMode,
+      },
     );
   }
 

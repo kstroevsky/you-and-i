@@ -5,7 +5,12 @@ import { createDerivationCache } from '@/app/store/createGameStore/derivations';
 import { isComputerTurn } from '@/app/store/createGameStore/match';
 import { createPersistenceRuntime } from '@/app/store/createGameStore/persistenceRuntime';
 import { createPublicGameStoreActions } from '@/app/store/createGameStore/publicActions';
-import { buildSessionFromSlices, createRuntimeState, getSessionSlices } from '@/app/store/createGameStore/session';
+import {
+  buildSessionFromSlices,
+  createRuntimeState,
+  createSessionId,
+  getSessionSlices,
+} from '@/app/store/createGameStore/session';
 import {
   createInitialInteractionState,
   createSelectionUpdate,
@@ -143,6 +148,7 @@ export function createGameStoreStateRuntime({
         beginFreshFullSession: persistenceRuntime.beginFreshFullSession,
         commitAction: transitions.commitAction,
         consumeStartupHydrationOnMutation: persistenceRuntime.consumeStartupHydrationOnMutation,
+        createSessionId: options.createSessionId ?? createSessionId,
         disposeAiWorker: aiController.disposeAiWorker,
         get,
         getBoardDerivation,

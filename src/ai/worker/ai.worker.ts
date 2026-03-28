@@ -8,6 +8,7 @@ async function handleChooseMove(message: AiWorkerRequest): Promise<AiWorkerRespo
   try {
     const modelGuidance = await getModelGuidance(message.state, message.ruleConfig);
     const result = chooseComputerAction({
+      behaviorProfile: message.behaviorProfile,
       difficulty: message.matchSettings.aiDifficulty,
       modelGuidance,
       ruleConfig: message.ruleConfig,

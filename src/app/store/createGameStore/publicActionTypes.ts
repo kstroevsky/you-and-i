@@ -29,6 +29,7 @@ export type PublicActionsOptions = {
   beginFreshFullSession: () => HistoryHydrationStatus;
   commitAction: (action: TurnAction) => void;
   consumeStartupHydrationOnMutation: () => HistoryHydrationStatus;
+  createSessionId: () => string;
   disposeAiWorker: () => void;
   get: () => GameStoreState;
   getBoardDerivation: (
@@ -43,7 +44,14 @@ export type PublicActionsOptions = {
   persistCurrentState: (
     nextState: Pick<
       GameStoreData,
-      'ruleConfig' | 'preferences' | 'matchSettings' | 'gameState' | 'turnLog' | 'past' | 'future'
+      | 'ruleConfig'
+      | 'preferences'
+      | 'matchSettings'
+      | 'aiBehaviorProfile'
+      | 'gameState'
+      | 'turnLog'
+      | 'past'
+      | 'future'
     >,
   ) => void;
   resetAiState: () => Pick<GameStoreData, 'aiError' | 'aiStatus' | 'pendingAiRequestId'>;

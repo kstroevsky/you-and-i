@@ -2,11 +2,13 @@ import type { OrderedAction } from '@/ai/moveOrdering';
 import type { ParticipationState } from '@/ai/participation';
 import type {
   AiDifficultyPreset,
+  AiRiskMode,
   AiSearchDiagnostics,
   AiStrategicIntent,
   AiStrategicTag,
 } from '@/ai/types';
 import type { Player, RuleConfig, TurnAction } from '@/domain';
+import type { AiBehaviorProfile } from '@/shared/types/session';
 
 export type BoundFlag = 'exact' | 'lower' | 'upper';
 
@@ -26,15 +28,21 @@ export type SearchLineEntry = {
 export type RootRankedAction = Pick<
   OrderedAction,
   | 'action'
+  | 'emptyCellsDelta'
+  | 'freezeSwingBonus'
+  | 'homeFieldDelta'
   | 'intent'
   | 'intentDelta'
   | 'isForced'
   | 'isRepetition'
   | 'isSelfUndo'
   | 'isTactical'
+  | 'mobilityDelta'
   | 'movedMass'
   | 'participationDelta'
   | 'policyPrior'
+  | 'repeatedPositionCount'
+  | 'sixStackDelta'
   | 'sourceFamily'
   | 'tags'
 > & {
@@ -42,6 +50,7 @@ export type RootRankedAction = Pick<
 };
 
 export type SearchContext = {
+  behaviorProfile: AiBehaviorProfile | null;
   continuationScores: Map<string, number>;
   deadline: number;
   diagnostics: AiSearchDiagnostics;
@@ -52,6 +61,7 @@ export type SearchContext = {
   preset: AiDifficultyPreset;
   policyPriors: Record<string, number> | null;
   pvMoveByDepth: Map<number, TurnAction>;
+  riskMode: AiRiskMode;
   rootParticipationState: ParticipationState;
   rootPlayer: Player;
   rootPreviousOwnAction: TurnAction | null;

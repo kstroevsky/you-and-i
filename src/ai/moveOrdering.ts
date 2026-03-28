@@ -1,18 +1,25 @@
 import {
   advanceEngineState,
   getLegalActions,
+  getScoreSummary,
   hashPosition,
   type EngineState,
   type Player,
   type RuleConfig,
   type TurnAction,
 } from '@/domain';
+import { getBehaviorActionBias, getBehaviorGeometryBias } from '@/ai/behavior';
 import { evaluateStructureState } from '@/ai/evaluation';
 import {
   getActionParticipationProfile,
   type ParticipationState,
   type SourceRegion,
 } from '@/ai/participation';
+import {
+  createProgressSnapshot,
+  getEmptyCellCount,
+  getRiskCandidateAdjustment,
+} from '@/ai/risk';
 import {
   getActionStrategicProfile,
   getNoveltyPenalty,
@@ -21,16 +28,26 @@ import { actionKey, throwIfTimedOut } from '@/ai/search/shared';
 import { getCellHeight, getTopChecker } from '@/domain/model/board';
 import { FRONT_HOME_ROW, HOME_ROWS } from '@/domain/model/constants';
 import { getAdjacentCoord, getJumpDirection, parseCoord } from '@/domain/model/coordinates';
-import type { AiDifficultyPreset, AiStrategicIntent, AiStrategicTag } from '@/ai/types';
+import type {
+  AiDifficultyPreset,
+  AiRiskMode,
+  AiStrategicIntent,
+  AiStrategicTag,
+} from '@/ai/types';
+import type { AiBehaviorProfile } from '@/shared/types/session';
 
 export type OrderedAction = {
   action: TurnAction;
+  emptyCellsDelta: number;
   intent: AiStrategicIntent;
   intentDelta: number;
   isForced: boolean;
   isRepetition: boolean;
   isSelfUndo: boolean;
   isTactical: boolean;
+  freezeSwingBonus: number;
+  homeFieldDelta: number;
+  mobilityDelta: number;
   movedMass: number;
   nextPositionKey: string;
   nextState: EngineState;
@@ -42,6 +59,7 @@ export type OrderedAction = {
   repeatsSourceRegion: boolean;
   score: number;
   serializedAction: string;
+  sixStackDelta: number;
   sourceFamily: string;
   sourceRegion: SourceRegion;
   tags: AiStrategicTag[];
@@ -54,6 +72,7 @@ export type PrecomputedOrderedAction = Omit<OrderedAction, 'score'> & {
 
 export type OrderMovesOptions = {
   actions?: TurnAction[];
+  behaviorProfile?: AiBehaviorProfile | null;
   deadline?: number;
   grandparentPositionKey?: string | null;
   historyScores?: Map<string, number>;
@@ -67,6 +86,7 @@ export type OrderMovesOptions = {
   policyPriorWeight?: number;
   pvMove?: TurnAction | null;
   repetitionPenalty?: number;
+  riskMode?: AiRiskMode;
   samePlayerPreviousAction?: TurnAction | null;
   selfUndoPenalty?: number;
   continuationScores?: Map<string, number>;
@@ -321,6 +341,7 @@ export function precomputeOrderedActions(
   preset: AiDifficultyPreset,
   {
     actions,
+    behaviorProfile = null,
     deadline,
     grandparentPositionKey = null,
     now,
@@ -329,11 +350,13 @@ export function precomputeOrderedActions(
     previousStrategicTags = null,
     policyPriorWeight = preset.policyPriorWeight,
     repetitionPenalty = preset.repetitionPenalty,
+    riskMode = 'normal',
     samePlayerPreviousAction = null,
     selfUndoPenalty = preset.selfUndoPenalty,
   }: Pick<
     OrderMovesOptions,
     | 'actions'
+    | 'behaviorProfile'
     | 'deadline'
     | 'grandparentPositionKey'
     | 'now'
@@ -342,12 +365,20 @@ export function precomputeOrderedActions(
     | 'policyPriorWeight'
     | 'previousStrategicTags'
     | 'repetitionPenalty'
+    | 'riskMode'
     | 'samePlayerPreviousAction'
     | 'selfUndoPenalty'
   > = {},
 ): PrecomputedOrderedAction[] {
   const actor = state.currentPlayer;
-  const baseStructureScore = evaluateStructureState(state, actor, ruleConfig);
+  const baseStructureScore = evaluateStructureState(state, actor, ruleConfig, {
+    behaviorProfile,
+    preset,
+    riskMode,
+  });
+  const baseProgress = createProgressSnapshot(state);
+  const baseLegalMoveCount = getLegalActions(state, ruleConfig).length;
+  const baseEmptyCells = getEmptyCellCount(state);
   return (actions ?? getLegalActions(state, ruleConfig)).map<PrecomputedOrderedAction>((action) => {
     throwIfMoveOrderingTimedOut(deadline, now);
 
@@ -361,6 +392,15 @@ export function precomputeOrderedActions(
     const frontRowGrowth = growsFrontRowStack(state, action, nextState, actor);
     const homeProgress = improvesHomeField(action, actor);
     const freezeSwingBonus = getFreezeSwingBonus(state, action, actor);
+    const nextProgress = createProgressSnapshot(nextState);
+    const mobilityDelta =
+      (nextState.status === 'gameOver' ? 0 : getLegalActions(nextState, ruleConfig).length) -
+      baseLegalMoveCount;
+    const emptyCellsDelta = getEmptyCellCount(nextState) - baseEmptyCells;
+    const homeFieldDelta =
+      nextProgress.homeFieldProgress[actor] - baseProgress.homeFieldProgress[actor];
+    const sixStackDelta =
+      nextProgress.sixStackProgress[actor] - baseProgress.sixStackProgress[actor];
     const strategicProfile = getActionStrategicProfile(
       state,
       action,
@@ -368,7 +408,11 @@ export function precomputeOrderedActions(
       actor,
     );
     const staticPromise =
-      evaluateStructureState(nextState, actor, ruleConfig) - baseStructureScore;
+      evaluateStructureState(nextState, actor, ruleConfig, {
+        behaviorProfile,
+        preset,
+        riskMode,
+      }) - baseStructureScore;
     const serializedAction = actionKey(action);
     const policyPrior = policyPriors?.[serializedAction] ?? 0;
     const isRepetition = repeatedPositionCount > 1;
@@ -426,6 +470,16 @@ export function precomputeOrderedActions(
     staticScore += clampScore(strategicProfile.intentDelta, 6_000);
     staticScore += clampScore(participationProfile.participationDelta, 2_400);
     staticScore += strategicProfile.policyBias;
+    staticScore += getBehaviorActionBias(behaviorProfile?.id ?? null, strategicProfile.tags);
+    if (state.moveNumber <= 6) {
+      staticScore += Math.round(
+        getBehaviorGeometryBias(
+          behaviorProfile?.id ?? null,
+          action,
+          behaviorProfile?.seed ?? null,
+        ) * 6,
+      );
+    }
     staticScore += Math.round(policyPrior * policyPriorWeight);
     staticScore -= noveltyPenalty;
 
@@ -433,18 +487,42 @@ export function precomputeOrderedActions(
       staticScore -= repetitionPenalty * (repeatedPositionCount - 1);
     }
 
-    if (isSelfUndo && !isTactical) {
+    if (isSelfUndo && !isForced) {
       staticScore -= selfUndoPenalty;
+    }
+
+    if (riskMode !== 'normal') {
+      staticScore += getRiskCandidateAdjustment(
+        {
+          emptyCellsDelta,
+          freezeSwingBonus,
+          homeFieldDelta,
+          isForced,
+          isRepetition,
+          isSelfUndo,
+          isTactical,
+          mobilityDelta,
+          repeatedPositionCount,
+          sixStackDelta,
+          tags: strategicProfile.tags,
+        },
+        preset,
+        riskMode,
+      );
     }
 
     return {
       action,
+      emptyCellsDelta,
       intent: strategicProfile.intent,
       intentDelta: strategicProfile.intentDelta,
       isForced,
       isRepetition,
       isSelfUndo,
       isTactical,
+      freezeSwingBonus,
+      homeFieldDelta,
+      mobilityDelta,
       movedMass: participationProfile.movedMass,
       nextPositionKey,
       nextState,
@@ -457,6 +535,7 @@ export function precomputeOrderedActions(
       sourceFamily: participationProfile.sourceFamily,
       sourceRegion: participationProfile.sourceRegion,
       serializedAction,
+      sixStackDelta,
       staticScore,
       tags: strategicProfile.tags,
       winsImmediately,

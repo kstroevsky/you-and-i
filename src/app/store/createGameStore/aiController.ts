@@ -244,6 +244,7 @@ export function createAiController({ commitAction, get, options, set }: AiContro
       ruleConfig: state.ruleConfig,
       state: state.gameState,
       matchSettings: state.matchSettings,
+      behaviorProfile: state.aiBehaviorProfile,
     });
   }
 

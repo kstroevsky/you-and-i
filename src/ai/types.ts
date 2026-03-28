@@ -1,5 +1,6 @@
 import type { EngineState, RuleConfig, TurnAction } from '@/domain';
 import type { AiDifficulty, MatchSettings } from '@/shared/types/session';
+import type { AiBehaviorProfile, AiBehaviorProfileId } from '@/shared/types/session';
 
 export type AiStrategicIntent = 'home' | 'sixStack' | 'hybrid';
 export type AiStrategicTag =
@@ -11,8 +12,12 @@ export type AiStrategicTag =
   | 'openLane'
   | 'rescue';
 
+export type AiRiskMode = 'normal' | 'stagnation' | 'late';
+
 /** Search-budget tuning for one exposed difficulty level. */
 export type AiDifficultyPreset = {
+  drawAversionAhead: number;
+  drawAversionBehindRelief: number;
   familyVarietyWeight: number;
   maxDepth: number;
   participationBias: number;
@@ -21,7 +26,18 @@ export type AiDifficultyPreset = {
   quietMoveLimit: number;
   repetitionPenalty: number;
   rootCandidateLimit: number;
+  riskBandWidening: number;
+  riskLoopPenalty: number;
+  riskPolicyPriorScale: number;
+  riskProgressBonus: number;
+  riskTacticalBonus: number;
   sourceReusePenalty: number;
+  stagnationDisplacementWeight: number;
+  stagnationMobilityWeight: number;
+  stagnationProgressWeight: number;
+  stagnationRepetitionWeight: number;
+  stagnationSelfUndoWeight: number;
+  stagnationThreshold: number;
   selfUndoPenalty: number;
   timeBudgetMs: number;
   frontierWidthWeight: number;
@@ -39,6 +55,7 @@ export type AiFallbackKind =
 
 /** Inputs accepted by the pure search entrypoint. */
 export type ChooseComputerActionRequest = {
+  behaviorProfile?: AiBehaviorProfile | null;
   difficulty: AiDifficulty;
   modelGuidance?: AiModelGuidance | null;
   now?: () => number;
@@ -73,6 +90,8 @@ export type AiRootCandidate = {
 export type AiSearchDiagnostics = {
   aspirationResearches: number;
   betaCutoffs: number;
+  drawAversionApplications: number;
+  lateRiskTriggers: number;
   orderedFallbacks: number;
   participationPenalties: number;
   policyPriorHits: number;
@@ -81,12 +100,14 @@ export type AiSearchDiagnostics = {
   repetitionPenalties: number;
   selfUndoPenalties: number;
   sourceFamilyCollisions: number;
+  stagnationRiskTriggers: number;
   transpositionHits: number;
 };
 
 /** Final decision metadata returned by the search. */
 export type AiSearchResult = {
   action: TurnAction | null;
+  behaviorProfileId: AiBehaviorProfileId | null;
   completedDepth: number;
   completedRootMoves: number;
   diagnostics: AiSearchDiagnostics;
@@ -94,6 +115,7 @@ export type AiSearchResult = {
   evaluatedNodes: number;
   fallbackKind: AiFallbackKind;
   principalVariation: TurnAction[];
+  riskMode: AiRiskMode;
   rootCandidates: AiRootCandidate[];
   score: number;
   strategicIntent: AiStrategicIntent;
@@ -102,6 +124,7 @@ export type AiSearchResult = {
 
 /** Message sent from the store to the worker. */
 export type AiWorkerRequest = {
+  behaviorProfile: AiBehaviorProfile | null;
   matchSettings: MatchSettings;
   requestId: number;
   ruleConfig: RuleConfig;

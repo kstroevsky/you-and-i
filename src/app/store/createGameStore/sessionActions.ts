@@ -1,5 +1,6 @@
 import { checkVictory, createInitialState, deserializeSession, serializeSession, withRuleDefaults } from '@/domain';
 
+import { createAiBehaviorProfile } from '@/ai/behavior';
 import { getRuleConfigForNewMatch } from '@/app/store/createGameStore/match';
 import { buildSessionFromSlices } from '@/app/store/createGameStore/session';
 import { createIdleSelection } from '@/app/store/createGameStore/selection';
@@ -12,6 +13,7 @@ export function createSessionActions({
   applySession,
   beginFreshFullSession,
   consumeStartupHydrationOnMutation,
+  createSessionId,
   disposeAiWorker,
   get,
   getBoardDerivation,
@@ -65,6 +67,7 @@ export function createSessionActions({
         ruleConfig: state.ruleConfig,
         preferences,
         matchSettings: state.matchSettings,
+        aiBehaviorProfile: state.aiBehaviorProfile,
         gameState: state.gameState,
         turnLog: state.turnLog,
         past: state.past,
@@ -108,6 +111,7 @@ export function createSessionActions({
         ruleConfig,
         preferences: state.preferences,
         matchSettings: state.matchSettings,
+        aiBehaviorProfile: state.aiBehaviorProfile,
         gameState: nextGameState,
         turnLog: state.turnLog,
         past: state.past,
@@ -141,10 +145,16 @@ export function createSessionActions({
       const nextHistoryHydrationStatus = beginFreshFullSession();
       const nextRuleConfig = getRuleConfigForNewMatch(state.ruleConfig, matchSettings);
       const nextGameState = createInitialState(nextRuleConfig);
+      // The hidden persona stays stable for one match so resumed saves remain consistent.
+      const aiBehaviorProfile =
+        matchSettings.opponentMode === 'computer'
+          ? createAiBehaviorProfile(createSessionId())
+          : null;
       const nextData = {
         ruleConfig: nextRuleConfig,
         preferences: state.preferences,
         matchSettings,
+        aiBehaviorProfile,
         gameState: nextGameState,
         turnLog: [],
         past: [],
@@ -161,6 +171,7 @@ export function createSessionActions({
         importBuffer: '',
         importError: null,
         lastAiDecision: null,
+        aiBehaviorProfile,
         setupMatchSettings: matchSettings,
       });
       persistCurrentState(nextData);

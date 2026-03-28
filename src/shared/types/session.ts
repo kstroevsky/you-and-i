@@ -14,6 +14,13 @@ export type AppPreferences = {
   language: Language;
 };
 
+export type AiBehaviorProfileId = 'expander' | 'hunter' | 'builder';
+
+export type AiBehaviorProfile = {
+  id: AiBehaviorProfileId;
+  seed: string;
+};
+
 export type OpponentMode = 'hotSeat' | 'computer';
 export type AiDifficulty = 'easy' | 'medium' | 'hard';
 
@@ -74,6 +81,22 @@ export type SerializableSessionV3 = {
   future: UndoFrame[];
 };
 
-export type SerializableSession = SerializableSessionV3;
+export type SerializableSessionV4 = {
+  version: 4;
+  ruleConfig: RuleConfig;
+  preferences: AppPreferences;
+  matchSettings: MatchSettings;
+  aiBehaviorProfile: AiBehaviorProfile | null;
+  turnLog: TurnRecord[];
+  present: UndoFrame;
+  past: UndoFrame[];
+  future: UndoFrame[];
+};
 
-export type DeserializedSession = SerializableSessionV1 | SerializableSessionV2 | SerializableSessionV3;
+export type SerializableSession = SerializableSessionV4;
+
+export type DeserializedSession =
+  | SerializableSessionV1
+  | SerializableSessionV2
+  | SerializableSessionV3
+  | SerializableSessionV4;

@@ -1,11 +1,15 @@
 import { advanceEngineState, type EngineState, type TurnAction } from '@/domain';
 import type {
   AiDifficultyPreset,
+  AiRiskMode,
   AiRootCandidate,
   AiSearchDiagnostics,
   AiSearchResult,
 } from '@/ai/types';
+import type { AiBehaviorProfileId } from '@/shared/types/session';
 
+import { getBehaviorActionBias, getBehaviorGeometryBias } from '@/ai/behavior';
+import { getRiskCandidateAdjustment, hasCertifiedRiskProgress } from '@/ai/risk';
 import { toRootCandidate } from '@/ai/search/heuristics';
 import { actionKey, makeTableKey } from '@/ai/search/shared';
 import type { RootRankedAction, SearchContext } from '@/ai/search/types';
@@ -15,6 +19,8 @@ export function createSearchDiagnostics(): AiSearchDiagnostics {
   return {
     aspirationResearches: 0,
     betaCutoffs: 0,
+    drawAversionApplications: 0,
+    lateRiskTriggers: 0,
     orderedFallbacks: 0,
     participationPenalties: 0,
     policyPriorHits: 0,
@@ -23,6 +29,7 @@ export function createSearchDiagnostics(): AiSearchDiagnostics {
     repetitionPenalties: 0,
     selfUndoPenalties: 0,
     sourceFamilyCollisions: 0,
+    stagnationRiskTriggers: 0,
     transpositionHits: 0,
   };
 }
@@ -31,6 +38,7 @@ export function createSearchDiagnostics(): AiSearchDiagnostics {
 export function createEmptyResult(action: TurnAction | null, score: number): AiSearchResult {
   return {
     action,
+    behaviorProfileId: null,
     completedDepth: 0,
     completedRootMoves: action ? 1 : 0,
     diagnostics: createSearchDiagnostics(),
@@ -38,6 +46,7 @@ export function createEmptyResult(action: TurnAction | null, score: number): AiS
     evaluatedNodes: 0,
     fallbackKind: action ? 'legalOrder' : 'none',
     principalVariation: action ? [action] : [],
+    riskMode: 'normal',
     rootCandidates: action
       ? [
           {
@@ -110,37 +119,70 @@ export function selectCandidateAction(
   ranked: RootRankedAction[],
   preset: AiDifficultyPreset,
   random: () => number,
+  options: {
+    bandBoost?: number;
+    behaviorProfileId?: AiBehaviorProfileId | null;
+    behaviorSeed?: string | null;
+    riskMode?: AiRiskMode;
+  } = {},
 ): RootRankedAction {
+  const riskMode = options.riskMode ?? 'normal';
+  const bandBoost = options.bandBoost ?? 0;
   const best = ranked[0];
 
   if (!best || preset.varietyTopCount <= 1 || ranked.length === 1) {
     return best;
   }
 
-  if (best.isForced || best.isTactical) {
+  if (best.isForced) {
     return best;
   }
 
-  const tolerance = Math.max(60, Math.abs(best.score) * preset.varietyThreshold);
+  const tolerance =
+    Math.max(60, Math.abs(best.score) * preset.varietyThreshold) +
+    (riskMode === 'normal' ? 0 : Math.round(4_000 * preset.riskBandWidening)) +
+    bandBoost;
   const nearEqual = ranked.filter((entry) => Math.abs(best.score - entry.score) <= tolerance);
-  const quietCandidates = nearEqual
+  const rerankEligibleCandidates = nearEqual
     .filter(
       (entry) =>
         !entry.isForced &&
-        !entry.isTactical &&
         !entry.isSelfUndo &&
         !entry.isRepetition,
     )
     .slice(0, Math.max(preset.varietyTopCount * 6, preset.varietyTopCount));
+  const riskCertifiedCandidates =
+    riskMode === 'normal'
+      ? rerankEligibleCandidates
+      : rerankEligibleCandidates.filter((entry) =>
+          hasCertifiedRiskProgress({
+            emptyCellsDelta: entry.emptyCellsDelta,
+            freezeSwingBonus: entry.freezeSwingBonus,
+            homeFieldDelta: entry.homeFieldDelta,
+            isForced: entry.isForced,
+            isRepetition: entry.isRepetition,
+            isSelfUndo: entry.isSelfUndo,
+            isTactical: entry.isTactical,
+            mobilityDelta: entry.mobilityDelta,
+            repeatedPositionCount: entry.repeatedPositionCount,
+            sixStackDelta: entry.sixStackDelta,
+            tags: entry.tags,
+          }),
+        );
+  const rerankCandidates = riskMode === 'normal' ? rerankEligibleCandidates : riskCertifiedCandidates;
 
-  if (!quietCandidates.length) {
+  if (!rerankEligibleCandidates.length) {
+    return best;
+  }
+
+  if (riskMode !== 'normal' && !rerankCandidates.length) {
     return best;
   }
 
   const uniqueFamilies = new Set<string>();
   const familyFirstPass: RootRankedAction[] = [];
 
-  for (const entry of quietCandidates) {
+  for (const entry of rerankCandidates) {
     if (uniqueFamilies.has(entry.sourceFamily)) {
       continue;
     }
@@ -155,7 +197,7 @@ export function selectCandidateAction(
 
   const candidatePool = familyFirstPass.length > 1
     ? familyFirstPass
-    : quietCandidates.slice(0, preset.varietyTopCount);
+    : rerankCandidates.slice(0, preset.varietyTopCount);
 
   if (candidatePool.length === 1) {
     return candidatePool[0];
@@ -163,27 +205,83 @@ export function selectCandidateAction(
 
   const coveredTags = new Set<AiRootCandidate['tags'][number]>();
   const coveredFamilies = new Set<string>();
+  const scoreCompression =
+    bandBoost <= 0
+      ? 1
+      : riskMode === 'normal'
+        ? 0.2
+        : 0.1;
   const weighted = candidatePool.map((entry, index) => {
+    const riskBonus =
+      riskMode === 'normal'
+        ? 0
+        : getRiskCandidateAdjustment(
+            {
+              emptyCellsDelta: entry.emptyCellsDelta,
+              freezeSwingBonus: entry.freezeSwingBonus,
+              homeFieldDelta: entry.homeFieldDelta,
+              isForced: entry.isForced,
+              isRepetition: entry.isRepetition,
+              isSelfUndo: entry.isSelfUndo,
+              isTactical: entry.isTactical,
+              mobilityDelta: entry.mobilityDelta,
+              repeatedPositionCount: entry.repeatedPositionCount,
+              sixStackDelta: entry.sixStackDelta,
+              tags: entry.tags,
+            },
+            preset,
+            riskMode,
+          );
     const diversityBonus = entry.tags.some((tag) => !coveredTags.has(tag)) ? 40 : 0;
     const familyBonus = coveredFamilies.has(entry.sourceFamily) ? 0 : 55;
+    const personaTagBonus =
+      riskMode === 'normal'
+        ? Math.round(
+            getBehaviorActionBias(options.behaviorProfileId ?? null, entry.tags) *
+              Math.max(0.25, preset.familyVarietyWeight / 120),
+          )
+        : 0;
+    const seededGeometryBonus =
+      riskMode === 'normal'
+        ? Math.round(
+            getBehaviorGeometryBias(
+              options.behaviorProfileId ?? null,
+              entry.action,
+              options.behaviorSeed ?? null,
+            ) *
+              Math.max(1.5, preset.familyVarietyWeight / 10),
+          )
+        : 0;
+    const compressedScore = best.score + (entry.score - best.score) * scoreCompression;
 
     coveredFamilies.add(entry.sourceFamily);
     entry.tags.forEach((tag) => coveredTags.add(tag));
 
     const adjustedScore =
-      entry.score +
+      compressedScore +
       familyBonus +
       diversityBonus +
+      personaTagBonus +
+      seededGeometryBonus +
       Math.round(entry.participationDelta * 0.2) +
       Math.round(entry.policyPrior * 40) +
+      riskBonus +
       (entry.intent === 'hybrid' ? 15 : 0) -
       index * 5;
 
     return {
+      adjustedScore,
       entry,
       weight: Math.exp((adjustedScore - best.score) / Math.max(0.01, preset.varietyTemperature * 400)),
     };
   });
+
+  if (bandBoost > 0) {
+    return weighted.reduce((currentBest, candidate) =>
+      candidate.adjustedScore > currentBest.adjustedScore ? candidate : currentBest,
+    ).entry;
+  }
+
   const totalWeight = weighted.reduce((sum, candidate) => sum + candidate.weight, 0);
   let threshold = random() * totalWeight;
 

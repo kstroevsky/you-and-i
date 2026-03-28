@@ -4,11 +4,14 @@ import type {
   SerializableSession,
   SerializableSessionV1,
   SerializableSessionV2,
+  SerializableSessionV3,
+  SerializableSessionV4,
 } from '@/shared/types/session';
 import { isRecord } from '@/shared/utils/collections';
 
 import { createUndoFrame } from '@/domain/serialization/session/frames';
 import {
+  assertAiBehaviorProfile,
   assertMatchSettings,
   assertPreferences,
   assertRuleConfig,
@@ -22,9 +25,9 @@ import {
   getCanonicalTurnLog,
 } from '@/domain/serialization/session/normalization';
 
-/** Converts legacy session payloads into the v3 storage shape. */
+/** Converts legacy session payloads into the v4 storage shape. */
 function migrateSession(
-  session: SerializableSessionV1 | SerializableSessionV2,
+  session: SerializableSessionV1 | SerializableSessionV2 | SerializableSessionV3,
 ): SerializableSession {
   const turnLog =
     session.version === 1
@@ -35,10 +38,13 @@ function migrateSession(
   const future = session.version === 1 ? session.future.map(createUndoFrame) : session.future;
 
   return {
-    version: 3,
+    // Session v4 persists the hidden AI persona so resumed computer games keep
+    // the same style profile, while all older sessions migrate safely to null.
+    version: 4,
     ruleConfig: session.ruleConfig,
     preferences: session.preferences,
-    matchSettings: DEFAULT_MATCH_SETTINGS,
+    matchSettings: session.version === 3 ? session.matchSettings : DEFAULT_MATCH_SETTINGS,
+    aiBehaviorProfile: null,
     turnLog,
     present,
     past,
@@ -91,7 +97,7 @@ function assertSessionV2(value: unknown): SerializableSessionV2 {
 }
 
 /** Runtime guard for full v3 session payload. */
-function assertSessionV3(value: unknown): SerializableSession {
+function assertSessionV3(value: unknown): SerializableSessionV3 {
   if (!isRecord(value) || value.version !== 3) {
     throw new Error('Unsupported session payload.');
   }
@@ -119,7 +125,37 @@ function assertSessionV3(value: unknown): SerializableSession {
   };
 }
 
-/** Deserializes session JSON and normalizes every payload to the v3 session shape. */
+/** Runtime guard for full v4 session payload. */
+function assertSessionV4(value: unknown): SerializableSessionV4 {
+  if (!isRecord(value) || value.version !== 4) {
+    throw new Error('Unsupported session payload.');
+  }
+
+  const turnLog = assertTurnLog(value.turnLog);
+  const present = assertValidFrame(assertUndoFrame(value.present, turnLog.length), turnLog);
+
+  if (!Array.isArray(value.past) || !Array.isArray(value.future)) {
+    throw new Error('Invalid session history frames.');
+  }
+
+  return {
+    version: 4,
+    ruleConfig: assertRuleConfig(value.ruleConfig),
+    preferences: assertPreferences(value.preferences),
+    matchSettings: assertMatchSettings(value.matchSettings),
+    aiBehaviorProfile: assertAiBehaviorProfile(value.aiBehaviorProfile),
+    turnLog,
+    present,
+    past: value.past.map((entry) =>
+      assertValidFrame(assertUndoFrame(entry, turnLog.length), turnLog),
+    ),
+    future: value.future.map((entry) =>
+      assertValidFrame(assertUndoFrame(entry, turnLog.length), turnLog),
+    ),
+  };
+}
+
+/** Deserializes session JSON and normalizes every payload to the v4 session shape. */
 export function deserializeSession(serialized: string): SerializableSession {
   const parsed = JSON.parse(serialized) as unknown;
   const session: DeserializedSession =
@@ -127,7 +163,9 @@ export function deserializeSession(serialized: string): SerializableSession {
       ? assertLegacySession(parsed)
       : isRecord(parsed) && parsed.version === 2
         ? assertSessionV2(parsed)
-        : assertSessionV3(parsed);
+        : isRecord(parsed) && parsed.version === 3
+          ? assertSessionV3(parsed)
+          : assertSessionV4(parsed);
 
-  return session.version === 3 ? session : migrateSession(session);
+  return session.version === 4 ? session : migrateSession(session);
 }

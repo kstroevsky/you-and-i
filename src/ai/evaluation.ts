@@ -1,10 +1,25 @@
-import type { AiDifficultyPreset } from '@/ai/types';
+import type {
+  AiDifficultyPreset,
+  AiRiskMode,
+  AiSearchDiagnostics,
+} from '@/ai/types';
 import type { EngineState, Player, RuleConfig } from '@/domain';
+import type { AiBehaviorProfile } from '@/shared/types/session';
 
+import { getBehaviorStateBias } from '@/ai/behavior';
 import { getParticipationScore, type ParticipationState } from '@/ai/participation';
+import { getDynamicDrawScore, getRiskStateBias } from '@/ai/risk';
 import { getStrategicIntent, getStrategicScore } from '@/ai/strategy';
 
 const TERMINAL_SCORE = 1_000_000;
+
+type EvaluationOptions = {
+  behaviorProfile?: AiBehaviorProfile | null;
+  diagnostics?: AiSearchDiagnostics | null;
+  participationState?: ParticipationState | null;
+  preset?: AiDifficultyPreset | null;
+  riskMode?: AiRiskMode;
+};
 
 /** Returns the opposing player for zero-sum score differences. */
 function getOpponent(player: Player): Player {
@@ -16,13 +31,20 @@ export function evaluateStructureState(
   state: EngineState,
   perspectivePlayer: Player,
   _ruleConfig: RuleConfig,
+  options: Omit<EvaluationOptions, 'participationState'> = {},
 ): number {
   if (state.status === 'gameOver') {
     if ('winner' in state.victory) {
       return state.victory.winner === perspectivePlayer ? TERMINAL_SCORE : -TERMINAL_SCORE;
     }
 
-    return 0;
+    return getDynamicDrawScore(
+      state,
+      perspectivePlayer,
+      options.preset ?? null,
+      options.riskMode ?? 'normal',
+      options.diagnostics ?? null,
+    );
   }
 
   return getStrategicScore(state, perspectivePlayer);
@@ -38,15 +60,22 @@ export function evaluateState(
   state: EngineState,
   perspectivePlayer: Player,
   _ruleConfig: RuleConfig,
-  participationState: ParticipationState | null = null,
-  preset: AiDifficultyPreset | null = null,
+  options: EvaluationOptions = {},
 ): number {
+  const {
+    behaviorProfile = null,
+    diagnostics = null,
+    participationState = null,
+    preset = null,
+    riskMode = 'normal',
+  } = options;
+
   if (state.status === 'gameOver') {
     if ('winner' in state.victory) {
       return state.victory.winner === perspectivePlayer ? TERMINAL_SCORE : -TERMINAL_SCORE;
     }
 
-    return 0;
+    return getDynamicDrawScore(state, perspectivePlayer, preset, riskMode, diagnostics);
   }
 
   const opponent = getOpponent(perspectivePlayer);
@@ -68,6 +97,14 @@ export function evaluateState(
 
   if (state.pendingJump) {
     score += state.currentPlayer === perspectivePlayer ? 140 : -140;
+  }
+
+  if (behaviorProfile) {
+    score += getBehaviorStateBias(state, perspectivePlayer, behaviorProfile.id);
+  }
+
+  if (riskMode !== 'normal') {
+    score += getRiskStateBias(state, perspectivePlayer, riskMode);
   }
 
   if (preset) {

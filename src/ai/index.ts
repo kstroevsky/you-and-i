@@ -7,6 +7,7 @@ export type {
   AiFallbackKind,
   AiDifficultyPreset,
   AiModelGuidance,
+  AiRiskMode,
   AiRootCandidate,
   AiSearchDiagnostics,
   AiSearchResult,

@@ -33,7 +33,7 @@ export function getMovePenalty(entry: OrderedAction, context: SearchContext): nu
     penalty += context.preset.repetitionPenalty * (entry.repeatedPositionCount - 1);
   }
 
-  if (entry.isSelfUndo && !entry.isTactical) {
+  if (entry.isSelfUndo && !entry.isForced) {
     context.diagnostics.selfUndoPenalties += 1;
     penalty += context.preset.selfUndoPenalty;
   }

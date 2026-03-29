@@ -119,6 +119,7 @@ export function createAiResult(overrides: Partial<AiSearchResult> = {}): AiSearc
     completedDepth: 1,
     completedRootMoves: 1,
     diagnostics: {
+      adverseDrawTrapPenalties: 0,
       aspirationResearches: 0,
       betaCutoffs: 0,
       drawAversionApplications: 0,

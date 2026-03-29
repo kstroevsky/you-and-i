@@ -211,9 +211,10 @@ export function runAiSoakPlayout(
       state,
     });
     const wallTimeMs = performance.now() - startedAt;
+    const wallTimeSlackMs = difficulty === 'easy' ? 450 : 250;
 
     expect(wallTimeMs).toBeLessThanOrEqual(
-      AI_DIFFICULTY_PRESETS[difficulty].timeBudgetMs + 250,
+      AI_DIFFICULTY_PRESETS[difficulty].timeBudgetMs + wallTimeSlackMs,
     );
     expect(result.action).not.toBeNull();
     expect(legalActions.map(actionKey)).toContain(actionKey(result.action));

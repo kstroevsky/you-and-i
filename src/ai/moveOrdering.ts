@@ -19,6 +19,7 @@ import {
   createProgressSnapshot,
   getEmptyCellCount,
   getRiskCandidateAdjustment,
+  getTiebreakPressureProfile,
 } from '@/ai/risk';
 import {
   getActionStrategicProfile,
@@ -31,13 +32,16 @@ import { getAdjacentCoord, getJumpDirection, parseCoord } from '@/domain/model/c
 import type {
   AiDifficultyPreset,
   AiRiskMode,
+  AiSearchDiagnostics,
   AiStrategicIntent,
   AiStrategicTag,
+  AiTiebreakEdgeKind,
 } from '@/ai/types';
 import type { AiBehaviorProfile } from '@/shared/types/session';
 
 export type OrderedAction = {
   action: TurnAction;
+  drawTrapRisk: number;
   emptyCellsDelta: number;
   intent: AiStrategicIntent;
   intentDelta: number;
@@ -63,6 +67,7 @@ export type OrderedAction = {
   sourceFamily: string;
   sourceRegion: SourceRegion;
   tags: AiStrategicTag[];
+  tiebreakEdgeKind: AiTiebreakEdgeKind;
   winsImmediately: boolean;
 };
 
@@ -74,6 +79,7 @@ export type OrderMovesOptions = {
   actions?: TurnAction[];
   behaviorProfile?: AiBehaviorProfile | null;
   deadline?: number;
+  diagnostics?: AiSearchDiagnostics | null;
   grandparentPositionKey?: string | null;
   historyScores?: Map<string, number>;
   includeAllQuietMoves?: boolean;
@@ -343,6 +349,7 @@ export function precomputeOrderedActions(
     actions,
     behaviorProfile = null,
     deadline,
+    diagnostics = null,
     grandparentPositionKey = null,
     now,
     participationState = null,
@@ -358,6 +365,7 @@ export function precomputeOrderedActions(
     | 'actions'
     | 'behaviorProfile'
     | 'deadline'
+    | 'diagnostics'
     | 'grandparentPositionKey'
     | 'now'
     | 'participationState'
@@ -371,16 +379,19 @@ export function precomputeOrderedActions(
   > = {},
 ): PrecomputedOrderedAction[] {
   const actor = state.currentPlayer;
-  const computeRiskSignals = riskMode !== 'normal';
+  const candidateActions = actions ?? getLegalActions(state, ruleConfig);
+  const computeRiskSignals =
+    riskMode !== 'normal' || candidateActions.some((action) => action.type === 'manualUnfreeze');
   const baseStructureScore = evaluateStructureState(state, actor, ruleConfig, {
     behaviorProfile,
+    diagnostics,
     preset,
     riskMode,
   });
   const baseProgress = computeRiskSignals ? createProgressSnapshot(state) : null;
   const baseLegalMoveCount = computeRiskSignals ? getLegalActions(state, ruleConfig).length : 0;
   const baseEmptyCells = computeRiskSignals ? getEmptyCellCount(state) : 0;
-  return (actions ?? getLegalActions(state, ruleConfig)).map<PrecomputedOrderedAction>((action) => {
+  return candidateActions.map<PrecomputedOrderedAction>((action) => {
     throwIfMoveOrderingTimedOut(deadline, now);
 
     const nextState = advanceEngineState(state, action, ruleConfig);
@@ -399,12 +410,14 @@ export function precomputeOrderedActions(
         baseLegalMoveCount
       : 0;
     const emptyCellsDelta = computeRiskSignals ? getEmptyCellCount(nextState) - baseEmptyCells : 0;
-    const homeFieldDelta = computeRiskSignals
-      ? nextProgress.homeFieldProgress[actor] - baseProgress.homeFieldProgress[actor]
-      : 0;
-    const sixStackDelta = computeRiskSignals
-      ? nextProgress.sixStackProgress[actor] - baseProgress.sixStackProgress[actor]
-      : 0;
+    const homeFieldDelta =
+      computeRiskSignals && nextProgress && baseProgress
+        ? nextProgress.homeFieldProgress[actor] - baseProgress.homeFieldProgress[actor]
+        : 0;
+    const sixStackDelta =
+      computeRiskSignals && nextProgress && baseProgress
+        ? nextProgress.sixStackProgress[actor] - baseProgress.sixStackProgress[actor]
+        : 0;
     const strategicProfile = getActionStrategicProfile(
       state,
       action,
@@ -414,6 +427,7 @@ export function precomputeOrderedActions(
     const staticPromise =
       evaluateStructureState(nextState, actor, ruleConfig, {
         behaviorProfile,
+        diagnostics,
         preset,
         riskMode,
       }) - baseStructureScore;
@@ -423,13 +437,35 @@ export function precomputeOrderedActions(
     const isSelfUndo =
       (grandparentPositionKey !== null && nextPositionKey === grandparentPositionKey) ||
       isDirectSelfUndo(action, samePlayerPreviousAction);
+    const meaningfulUnfreeze =
+      action.type === 'manualUnfreeze' &&
+      (mobilityDelta > 0 ||
+        homeFieldDelta > 0.01 ||
+        sixStackDelta > 0.01 ||
+        strategicProfile.tags.includes('decompress') ||
+        strategicProfile.tags.includes('openLane'));
+    const isForced = winsImmediately || nextState.status === 'gameOver';
     const isTactical =
       winsImmediately ||
       action.type === 'jumpSequence' ||
-      action.type === 'manualUnfreeze' ||
+      meaningfulUnfreeze ||
       freezeSwingBonus > 0 ||
       strategicProfile.tags.includes('freezeBlock') ||
-      strategicProfile.tags.includes('rescue');
+      (strategicProfile.tags.includes('rescue') && action.type !== 'manualUnfreeze');
+    const tiebreakProfile = getTiebreakPressureProfile(nextState, actor, riskMode, {
+      emptyCellsDelta,
+      freezeSwingBonus,
+      homeFieldDelta,
+      isForced: winsImmediately || nextState.status === 'gameOver',
+      isManualUnfreeze: action.type === 'manualUnfreeze',
+      isRepetition,
+      isSelfUndo,
+      isTactical,
+      mobilityDelta,
+      repeatedPositionCount,
+      sixStackDelta,
+      tags: strategicProfile.tags,
+    });
     const participationProfile = getActionParticipationProfile(
       state,
       action,
@@ -442,7 +478,6 @@ export function precomputeOrderedActions(
         winsImmediately,
       },
     );
-    const isForced = winsImmediately || nextState.status === 'gameOver';
     const noveltyPenalty = getNoveltyPenalty(strategicProfile.tags, previousStrategicTags);
     let staticScore = 0;
 
@@ -451,11 +486,7 @@ export function precomputeOrderedActions(
     }
 
     if (action.type === 'jumpSequence') {
-      staticScore += 7_500;
-    }
-
-    if (action.type === 'manualUnfreeze') {
-      staticScore += 5_500;
+      staticScore += isRepetition && !isForced ? 0 : 7_500;
     }
 
     if (frontRowGrowth) {
@@ -495,13 +526,23 @@ export function precomputeOrderedActions(
       staticScore -= selfUndoPenalty;
     }
 
+    if (tiebreakProfile.drawTrapRisk > 0 && !isForced) {
+      staticScore -= Math.round((200 + preset.riskLoopPenalty * 0.5) * tiebreakProfile.drawTrapRisk);
+
+      if (diagnostics) {
+        diagnostics.adverseDrawTrapPenalties += 1;
+      }
+    }
+
     if (riskMode !== 'normal') {
       staticScore += getRiskCandidateAdjustment(
         {
+          drawTrapRisk: tiebreakProfile.drawTrapRisk,
           emptyCellsDelta,
           freezeSwingBonus,
           homeFieldDelta,
           isForced,
+          isManualUnfreeze: action.type === 'manualUnfreeze',
           isRepetition,
           isSelfUndo,
           isTactical,
@@ -509,6 +550,7 @@ export function precomputeOrderedActions(
           repeatedPositionCount,
           sixStackDelta,
           tags: strategicProfile.tags,
+          tiebreakEdgeKind: tiebreakProfile.tiebreakEdgeKind,
         },
         preset,
         riskMode,
@@ -517,6 +559,7 @@ export function precomputeOrderedActions(
 
     return {
       action,
+      drawTrapRisk: tiebreakProfile.drawTrapRisk,
       emptyCellsDelta,
       intent: strategicProfile.intent,
       intentDelta: strategicProfile.intentDelta,
@@ -542,6 +585,7 @@ export function precomputeOrderedActions(
       sixStackDelta,
       staticScore,
       tags: strategicProfile.tags,
+      tiebreakEdgeKind: tiebreakProfile.tiebreakEdgeKind,
       winsImmediately,
     };
   });

@@ -13,6 +13,7 @@ export type AiStrategicTag =
   | 'rescue';
 
 export type AiRiskMode = 'normal' | 'stagnation' | 'late';
+export type AiTiebreakEdgeKind = 'ahead' | 'tied' | 'behind';
 
 /** Search-budget tuning for one exposed difficulty level. */
 export type AiDifficultyPreset = {
@@ -73,6 +74,7 @@ export type AiModelGuidance = {
 
 export type AiRootCandidate = {
   action: TurnAction;
+  drawTrapRisk: number;
   emptyCellsDelta: number;
   forced: boolean;
   freezeSwingBonus: number;
@@ -91,9 +93,11 @@ export type AiRootCandidate = {
   sixStackDelta: number;
   sourceFamily: string;
   tags: AiStrategicTag[];
+  tiebreakEdgeKind: AiTiebreakEdgeKind;
 };
 
 export type AiSearchDiagnostics = {
+  adverseDrawTrapPenalties: number;
   aspirationResearches: number;
   betaCutoffs: number;
   drawAversionApplications: number;

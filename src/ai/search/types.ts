@@ -28,6 +28,7 @@ export type SearchLineEntry = {
 export type RootRankedAction = Pick<
   OrderedAction,
   | 'action'
+  | 'drawTrapRisk'
   | 'emptyCellsDelta'
   | 'freezeSwingBonus'
   | 'homeFieldDelta'
@@ -45,6 +46,7 @@ export type RootRankedAction = Pick<
   | 'sixStackDelta'
   | 'sourceFamily'
   | 'tags'
+  | 'tiebreakEdgeKind'
 > & {
   score: number;
 };

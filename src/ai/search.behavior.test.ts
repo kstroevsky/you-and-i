@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { AI_DIFFICULTY_PRESETS, chooseComputerAction, orderMoves } from '@/ai';
 import { createAiBehaviorProfile, getBehaviorGeometryBias } from '@/ai/behavior';
 import { selectCandidateAction } from '@/ai/search/result';
+import { DRAW_TRAP_CHECKPOINTS, createDrawTrapReplayState } from '@/ai/test/fixtures/drawTrapReplay';
 import type { RootRankedAction } from '@/ai/search/types';
 import { applyAction, createInitialState, getLegalActions, hashPosition } from '@/domain';
 import type { GameState, TurnAction } from '@/domain/model/types';
+import { getDrawTiebreakMetrics } from '@/domain/rules/victory';
 import { boardWithPieces, checker, gameStateWithBoard, resetFactoryIds, withConfig } from '@/test/factories';
 
 import {
@@ -14,7 +16,51 @@ import {
   createOpponentThreatState,
   createSixStackWinState,
   createTickingClock,
-} from '@/ai/test/searchTestUtils';
+  createTimeoutClock,
+  } from '@/ai/test/searchTestUtils';
+
+function getTiebreakTuple(state: GameState, player: 'white' | 'black'): [number, number] {
+  const metrics = getDrawTiebreakMetrics(state);
+  const opponent = player === 'white' ? 'black' : 'white';
+
+  return [
+    metrics.ownFieldCheckers[player] - metrics.ownFieldCheckers[opponent],
+    metrics.completedHomeStacks[player] - metrics.completedHomeStacks[opponent],
+  ];
+}
+
+function compareTiebreakTuple(left: [number, number], right: [number, number]): number {
+  return left[0] !== right[0] ? left[0] - right[0] : left[1] - right[1];
+}
+
+function getRecurrenceRisk(state: GameState): number {
+  return state.positionCounts[hashPosition(state)] ?? 0;
+}
+
+function findSaferAlternative(
+  state: GameState,
+  baitAction: TurnAction,
+  config: ReturnType<typeof withConfig>,
+): TurnAction | undefined {
+  const baitState = applyAction(state, baitAction, config);
+  const baitTuple = getTiebreakTuple(baitState, state.currentPlayer);
+  const baitRisk = getRecurrenceRisk(baitState);
+
+  return getLegalActions(state, config).find((candidate) => {
+    if (candidate.type === 'manualUnfreeze' || actionKey(candidate) === actionKey(baitAction)) {
+      return false;
+    }
+
+    const candidateState = applyAction(state, candidate, config);
+    const candidateTuple = getTiebreakTuple(candidateState, state.currentPlayer);
+    const candidateRisk = getRecurrenceRisk(candidateState);
+
+    return (
+      compareTiebreakTuple(candidateTuple, baitTuple) > 0 ||
+      (compareTiebreakTuple(candidateTuple, baitTuple) >= 0 && candidateRisk < baitRisk)
+    );
+  });
+}
 
 describe('computer opponent search', () => {
   it('exposes the shipped difficulty presets', () => {
@@ -438,9 +484,95 @@ describe('computer opponent search', () => {
       Object.assign(AI_DIFFICULTY_PRESETS.hard, originalHardPreset);
     }
 
-    expect(result.rootCandidates.length).toBeGreaterThan(1);
-    expect(result.rootCandidates.some((candidate) => !candidate.isTactical)).toBe(true);
-    expect(result.rootCandidates.every((candidate) => Array.isArray(candidate.tags))).toBe(true);
+  expect(result.rootCandidates.length).toBeGreaterThan(1);
+  expect(result.rootCandidates.some((candidate) => !candidate.isTactical)).toBe(true);
+  expect(result.rootCandidates.every((candidate) => Array.isArray(candidate.tags))).toBe(true);
+  }, 30_000);
+
+  it('demotes flat manual unfreezes when safer progress exists on a draw-prone board', () => {
+    const config = withConfig({ drawRule: 'threefold' });
+    const baseState = gameStateWithBoard(
+      boardWithPieces({
+        A1: [checker('black', true)],
+        B4: [checker('black')],
+        A4: [checker('white')],
+        B5: [checker('white')],
+        C5: [checker('white')],
+      }),
+      {
+        currentPlayer: 'black',
+        moveNumber: 92,
+      },
+    );
+    const repeatedState: GameState = {
+      ...baseState,
+      positionCounts: {
+        ...baseState.positionCounts,
+        [hashPosition(baseState)]: 2,
+      },
+    };
+    const baitAction = getLegalActions(repeatedState, config).find((action) => action.type === 'manualUnfreeze');
+    const saferAlternative = baitAction
+      ? findSaferAlternative(repeatedState, baitAction, config)
+      : undefined;
+
+    expect(baitAction).toBeDefined();
+    expect(saferAlternative).toBeDefined();
+
+    for (const difficulty of ['easy', 'medium', 'hard'] as const) {
+      const result = chooseComputerAction({
+        difficulty,
+        now: createTickingClock(0.001),
+        random: () => 0,
+        ruleConfig: config,
+        state: repeatedState,
+      });
+
+      expect(result.action).not.toBeNull();
+      expect(result.action?.type).not.toBe('manualUnfreeze');
+    }
+  });
+
+  it('replays the reported draw-trap checkpoints and avoids the baited unfreeze', () => {
+    const config = withConfig({ drawRule: 'threefold' });
+    const qualifyingCheckpoints = DRAW_TRAP_CHECKPOINTS.map((checkpoint) => {
+      const state = createDrawTrapReplayState(checkpoint.moveNumber, config);
+      const legalActions = getLegalActions(state, config);
+      const saferAlternative = findSaferAlternative(state, checkpoint.baitAction, config);
+
+      expect(legalActions.map(actionKey)).toContain(actionKey(checkpoint.baitAction));
+
+      return {
+        ...checkpoint,
+        saferAlternative,
+        state,
+      };
+    }).filter(
+      (
+        checkpoint,
+      ): checkpoint is typeof checkpoint & {
+        saferAlternative: TurnAction;
+      } => checkpoint.saferAlternative !== undefined,
+    );
+
+    expect(qualifyingCheckpoints.length).toBeGreaterThan(0);
+
+    for (const difficulty of ['easy', 'medium', 'hard'] as const) {
+      for (const checkpoint of qualifyingCheckpoints) {
+        const { state } = checkpoint;
+
+        const result = chooseComputerAction({
+          difficulty,
+          now: createTimeoutClock(120, 100_000),
+          random: () => 0,
+          ruleConfig: config,
+          state,
+        });
+
+        expect(result.action).not.toBeNull();
+        expect(actionKey(result.action as TurnAction)).not.toBe(actionKey(checkpoint.baitAction));
+      }
+    }
   }, 30_000);
 
   it('samples different strategic tags across near-equal synthetic root candidates', () => {
@@ -456,6 +588,7 @@ describe('computer opponent search', () => {
       const ranked: RootRankedAction[] = [
         {
           action: { type: 'climbOne', source: 'A1', target: 'B2' } as const,
+          drawTrapRisk: 0,
           emptyCellsDelta: 1,
           freezeSwingBonus: 0,
           homeFieldDelta: 0.05,
@@ -474,9 +607,11 @@ describe('computer opponent search', () => {
           sixStackDelta: 0,
           sourceFamily: 'white-001',
           tags: ['advanceMass'],
+          tiebreakEdgeKind: 'tied',
         },
         {
           action: { type: 'climbOne', source: 'B1', target: 'C2' } as const,
+          drawTrapRisk: 0,
           emptyCellsDelta: 2,
           freezeSwingBonus: 0,
           homeFieldDelta: 0,
@@ -495,9 +630,11 @@ describe('computer opponent search', () => {
           sixStackDelta: 0,
           sourceFamily: 'white-002',
           tags: ['openLane'],
+          tiebreakEdgeKind: 'tied',
         },
         {
           action: { type: 'climbOne', source: 'C1', target: 'D2' } as const,
+          drawTrapRisk: 0,
           emptyCellsDelta: 0,
           freezeSwingBonus: 0,
           homeFieldDelta: 0,
@@ -516,6 +653,7 @@ describe('computer opponent search', () => {
           sixStackDelta: 0.08,
           sourceFamily: 'white-003',
           tags: ['frontBuild'],
+          tiebreakEdgeKind: 'tied',
         },
       ];
 
@@ -531,6 +669,7 @@ describe('computer opponent search', () => {
     const ranked: RootRankedAction[] = [
       {
         action: { type: 'climbOne', source: 'A1', target: 'B2' } as const,
+        drawTrapRisk: 0,
         emptyCellsDelta: 0,
         freezeSwingBonus: 0,
         homeFieldDelta: 0,
@@ -549,9 +688,11 @@ describe('computer opponent search', () => {
         sixStackDelta: 0,
         sourceFamily: 'white-001',
         tags: ['advanceMass'],
+        tiebreakEdgeKind: 'tied',
       },
       {
         action: { type: 'climbOne', source: 'B1', target: 'C2' } as const,
+        drawTrapRisk: 0,
         emptyCellsDelta: 2,
         freezeSwingBonus: 0,
         homeFieldDelta: 0,
@@ -570,6 +711,7 @@ describe('computer opponent search', () => {
         sixStackDelta: 0,
         sourceFamily: 'white-002',
         tags: ['decompress', 'openLane'],
+        tiebreakEdgeKind: 'tied',
       },
     ];
 
@@ -586,6 +728,7 @@ describe('computer opponent search', () => {
     const ranked: RootRankedAction[] = [
       {
         action: { type: 'climbOne', source: 'A1', target: 'B2' } as const,
+        drawTrapRisk: 0,
         emptyCellsDelta: 0,
         freezeSwingBonus: 0,
         homeFieldDelta: 0,
@@ -604,9 +747,11 @@ describe('computer opponent search', () => {
         sixStackDelta: 0,
         sourceFamily: 'white-001',
         tags: ['advanceMass'],
+        tiebreakEdgeKind: 'tied',
       },
       {
         action: { type: 'climbOne', source: 'B1', target: 'C2' } as const,
+        drawTrapRisk: 0,
         emptyCellsDelta: 0,
         freezeSwingBonus: 0,
         homeFieldDelta: 0,
@@ -625,6 +770,7 @@ describe('computer opponent search', () => {
         sixStackDelta: 0,
         sourceFamily: 'white-002',
         tags: ['advanceMass'],
+        tiebreakEdgeKind: 'tied',
       },
     ];
 
@@ -637,10 +783,69 @@ describe('computer opponent search', () => {
     ).toBe(actionKey(ranked[0].action));
   });
 
+  it('demotes near-equal candidates with high adverse draw-trap risk', () => {
+    const ranked: RootRankedAction[] = [
+      {
+        action: { type: 'manualUnfreeze', coord: 'A1' } as const,
+        drawTrapRisk: 0.92,
+        emptyCellsDelta: 0,
+        freezeSwingBonus: 0,
+        homeFieldDelta: 0,
+        intent: 'hybrid' as const,
+        intentDelta: 40,
+        isForced: false,
+        isRepetition: false,
+        isSelfUndo: false,
+        isTactical: false,
+        mobilityDelta: 0,
+        movedMass: 0,
+        participationDelta: 18,
+        policyPrior: 0.12,
+        repeatedPositionCount: 1,
+        score: 500,
+        sixStackDelta: 0,
+        sourceFamily: 'white-001',
+        tags: ['rescue'],
+        tiebreakEdgeKind: 'behind',
+      },
+      {
+        action: { type: 'moveSingleToEmpty', source: 'B4', target: 'B3' } as const,
+        drawTrapRisk: 0,
+        emptyCellsDelta: 0,
+        freezeSwingBonus: 0,
+        homeFieldDelta: 0.05,
+        intent: 'home' as const,
+        intentDelta: 38,
+        isForced: false,
+        isRepetition: false,
+        isSelfUndo: false,
+        isTactical: false,
+        mobilityDelta: 1,
+        movedMass: 1,
+        participationDelta: 20,
+        policyPrior: 0.08,
+        repeatedPositionCount: 1,
+        score: 497,
+        sixStackDelta: 0,
+        sourceFamily: 'white-002',
+        tags: ['advanceMass'],
+        tiebreakEdgeKind: 'tied',
+      },
+    ];
+
+    expect(
+      actionKey(selectCandidateAction(ranked, AI_DIFFICULTY_PRESETS.medium, () => 0, {
+        bandBoost: 1,
+        riskMode: 'normal',
+      }).action),
+    ).toBe(actionKey(ranked[1].action));
+  });
+
   it('lets hidden personas separate near-equal opening-style candidates', () => {
     const ranked: RootRankedAction[] = [
       {
         action: { type: 'climbOne', source: 'A1', target: 'B2' } as const,
+        drawTrapRisk: 0,
         emptyCellsDelta: 2,
         freezeSwingBonus: 0,
         homeFieldDelta: 0,
@@ -659,9 +864,11 @@ describe('computer opponent search', () => {
         sixStackDelta: 0,
         sourceFamily: 'white-001',
         tags: ['decompress', 'openLane'],
+        tiebreakEdgeKind: 'tied',
       },
       {
         action: { type: 'climbOne', source: 'B1', target: 'C2' } as const,
+        drawTrapRisk: 0,
         emptyCellsDelta: 0,
         freezeSwingBonus: 0,
         homeFieldDelta: 0,
@@ -680,6 +887,7 @@ describe('computer opponent search', () => {
         sixStackDelta: 0.07,
         sourceFamily: 'white-002',
         tags: ['frontBuild'],
+        tiebreakEdgeKind: 'tied',
       },
     ];
 
@@ -699,6 +907,7 @@ describe('computer opponent search', () => {
     const ranked: RootRankedAction[] = [
       {
         action: { type: 'jumpSequence', source: 'C3', path: ['E5'] } as const,
+        drawTrapRisk: 0,
         emptyCellsDelta: 0,
         freezeSwingBonus: 0,
         homeFieldDelta: 0.02,
@@ -717,9 +926,11 @@ describe('computer opponent search', () => {
         sixStackDelta: 0,
         sourceFamily: 'white-001',
         tags: ['advanceMass', 'openLane'],
+        tiebreakEdgeKind: 'tied',
       },
       {
         action: { type: 'jumpSequence', source: 'B3', path: ['D1'] } as const,
+        drawTrapRisk: 0,
         emptyCellsDelta: 1,
         freezeSwingBonus: 1,
         homeFieldDelta: 0,
@@ -738,6 +949,7 @@ describe('computer opponent search', () => {
         sixStackDelta: 0,
         sourceFamily: 'white-002',
         tags: ['decompress', 'rescue'],
+        tiebreakEdgeKind: 'tied',
       },
     ];
 

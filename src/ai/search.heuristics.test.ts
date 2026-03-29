@@ -16,6 +16,7 @@ function createSearchContext(): SearchContext {
     continuationScores: new Map<string, number>(),
     deadline: 0,
     diagnostics: {
+      adverseDrawTrapPenalties: 0,
       aspirationResearches: 0,
       betaCutoffs: 0,
       drawAversionApplications: 0,

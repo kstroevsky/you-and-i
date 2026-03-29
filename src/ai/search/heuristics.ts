@@ -16,6 +16,28 @@ export const TRANSPOSITION_LIMIT = 50_000;
 /** Extra tactical depth searched after the normal iterative-deepening frontier. */
 export const MAX_QUIESCENCE_DEPTH = 6;
 
+/** Adds one ply only for narrow draw-trap cases near the root or frontier. */
+export function getSelectiveExtension(
+  entry: Pick<OrderedAction, 'action' | 'drawTrapRisk' | 'isForced' | 'isTactical' | 'tags' | 'tiebreakEdgeKind'>,
+  depthRemaining: number,
+  currentDepth: number,
+): number {
+  if (
+    entry.isForced ||
+    entry.drawTrapRisk < 0.72 ||
+    entry.tiebreakEdgeKind !== 'behind' ||
+    (currentDepth > 1 && depthRemaining > 2)
+  ) {
+    return 0;
+  }
+
+  return entry.action.type === 'manualUnfreeze' ||
+    entry.tags.includes('freezeBlock') ||
+    (entry.isTactical && entry.drawTrapRisk >= 0.85)
+    ? 1
+    : 0;
+}
+
 /** Applies repetition and self-undo penalties while updating diagnostics. */
 export function getMovePenalty(entry: OrderedAction, context: SearchContext): number {
   let penalty = 0;
@@ -36,6 +58,15 @@ export function getMovePenalty(entry: OrderedAction, context: SearchContext): nu
   if (entry.isSelfUndo && !entry.isForced) {
     context.diagnostics.selfUndoPenalties += 1;
     penalty += context.preset.selfUndoPenalty;
+  }
+
+  if (entry.drawTrapRisk > 0 && entry.tiebreakEdgeKind !== 'ahead' && !entry.isForced) {
+    context.diagnostics.adverseDrawTrapPenalties += 1;
+    penalty += Math.round(
+      context.preset.riskLoopPenalty *
+        (entry.tiebreakEdgeKind === 'behind' ? 0.7 : 0.3) *
+        Math.max(entry.tiebreakEdgeKind === 'behind' ? 0.35 : 0.2, entry.drawTrapRisk),
+    );
   }
 
   return penalty;
@@ -82,6 +113,7 @@ export function rememberCutoffMove(
 export function toRootCandidate(entry: RootRankedAction): AiRootCandidate {
   return {
     action: entry.action,
+    drawTrapRisk: entry.drawTrapRisk,
     emptyCellsDelta: entry.emptyCellsDelta,
     forced: entry.isForced,
     freezeSwingBonus: entry.freezeSwingBonus,
@@ -100,6 +132,7 @@ export function toRootCandidate(entry: RootRankedAction): AiRootCandidate {
     sixStackDelta: entry.sixStackDelta,
     sourceFamily: entry.sourceFamily,
     tags: entry.tags,
+    tiebreakEdgeKind: entry.tiebreakEdgeKind,
   };
 }
 

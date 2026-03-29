@@ -8,7 +8,7 @@ import type { AiBehaviorProfile } from '@/shared/types/session';
 
 import { getBehaviorStateBias } from '@/ai/behavior';
 import { getParticipationScore, type ParticipationState } from '@/ai/participation';
-import { getDynamicDrawScore, getRiskStateBias } from '@/ai/risk';
+import { getDynamicDrawScore, getNonterminalDrawTrapBias, getRiskStateBias } from '@/ai/risk';
 import { getStrategicIntent, getStrategicScore } from '@/ai/strategy';
 
 const TERMINAL_SCORE = 1_000_000;
@@ -97,6 +97,10 @@ export function evaluateState(
 
   if (state.pendingJump) {
     score += state.currentPlayer === perspectivePlayer ? 140 : -140;
+  }
+
+  if (preset) {
+    score += getNonterminalDrawTrapBias(state, perspectivePlayer, preset, riskMode, diagnostics);
   }
 
   if (behaviorProfile) {

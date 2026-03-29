@@ -67,6 +67,7 @@ export function getQuiescenceMoves(
     includeAllQuietMoves: true,
     killerMoves: context.killerMovesByDepth.get(currentDepth) ?? [],
     now: context.now,
+    diagnostics: context.diagnostics,
     participationState,
     policyPriors: null,
     previousStrategicTags: null,
@@ -93,7 +94,7 @@ export function getQuiescenceMoves(
       entry.isForced ||
       entry.winsImmediately ||
       entry.action.type === 'jumpSequence' ||
-      entry.action.type === 'manualUnfreeze',
+      (entry.action.type === 'manualUnfreeze' && entry.isTactical),
   );
 }
 

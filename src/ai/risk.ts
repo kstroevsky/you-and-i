@@ -1,5 +1,12 @@
-import type { AiDifficultyPreset, AiRiskMode, AiStrategicTag } from '@/ai/types';
+import type {
+  AiDifficultyPreset,
+  AiRiskMode,
+  AiSearchDiagnostics,
+  AiStrategicTag,
+  AiTiebreakEdgeKind,
+} from '@/ai/types';
 import { getStrategicScore } from '@/ai/strategy';
+import { getDrawTiebreakMetrics } from '@/domain/rules/victory';
 import { getCellHeight } from '@/domain/model/board';
 import { allCoords } from '@/domain/model/coordinates';
 import type {
@@ -12,7 +19,6 @@ import type {
   TurnRecord,
 } from '@/domain/model/types';
 import { getLegalActions, getScoreSummary, hashPosition } from '@/domain';
-import type { AiSearchDiagnostics } from '@/ai/types';
 
 export type ProgressSnapshot = {
   frozenSingles: Record<Player, number>;
@@ -26,10 +32,12 @@ export type RiskProfile = {
 };
 
 export type RiskCandidateSignal = {
+  drawTrapRisk?: number;
   emptyCellsDelta: number;
   freezeSwingBonus: number;
   homeFieldDelta: number;
   isForced: boolean;
+  isManualUnfreeze?: boolean;
   isRepetition: boolean;
   isSelfUndo: boolean;
   isTactical: boolean;
@@ -37,6 +45,15 @@ export type RiskCandidateSignal = {
   repeatedPositionCount?: number;
   sixStackDelta: number;
   tags: AiStrategicTag[];
+  tiebreakEdgeKind?: AiTiebreakEdgeKind;
+};
+
+export type TiebreakPressureProfile = {
+  drawPressure: number;
+  drawTrapRisk: number;
+  tiebreakCheckerEdge: number;
+  tiebreakEdgeKind: AiTiebreakEdgeKind;
+  tiebreakStackEdge: number;
 };
 
 const STAGNATION_WINDOW = 6;
@@ -152,6 +169,77 @@ export function getEmptyCellCount(state: Pick<GameState | EngineState | StateSna
     (sum, coord) => sum + (getCellHeight(state.board, coord) === 0 ? 1 : 0),
     0,
   );
+}
+
+export function getTiebreakPressureProfile(
+  state: EngineState,
+  perspectivePlayer: Player,
+  riskMode: AiRiskMode,
+  candidate: Omit<RiskCandidateSignal, 'drawTrapRisk' | 'tiebreakEdgeKind'> | null = null,
+): TiebreakPressureProfile {
+  const metrics = getDrawTiebreakMetrics(state);
+  const opponent = getOpponent(perspectivePlayer);
+  const tiebreakCheckerEdge =
+    metrics.ownFieldCheckers[perspectivePlayer] - metrics.ownFieldCheckers[opponent];
+  const tiebreakStackEdge =
+    metrics.completedHomeStacks[perspectivePlayer] - metrics.completedHomeStacks[opponent];
+  const tiebreakEdgeKind =
+    tiebreakCheckerEdge > 0
+      ? 'ahead'
+      : tiebreakCheckerEdge < 0
+        ? 'behind'
+        : tiebreakStackEdge > 0
+          ? 'ahead'
+          : tiebreakStackEdge < 0
+            ? 'behind'
+            : 'tied';
+  const repetitionPressure = clamp(((state.positionCounts[hashPosition(state)] ?? 1) - 1) / 2, 0, 1);
+  const structuralFlatness = clamp((420 - Math.abs(getStrategicScore(state, perspectivePlayer))) / 420, 0, 1);
+  const movePressure = clamp((state.moveNumber - 24) / 46, 0, 1);
+  const riskFloor = riskMode === 'late' ? 0.45 : riskMode === 'stagnation' ? 0.25 : 0;
+  const drawPressure = clamp(
+    Math.max(riskFloor, repetitionPressure * 0.5 + structuralFlatness * 0.3 + movePressure * 0.2),
+    0,
+    1,
+  );
+
+  if (!candidate || tiebreakEdgeKind === 'ahead') {
+    return {
+      drawPressure,
+      drawTrapRisk: 0,
+      tiebreakCheckerEdge,
+      tiebreakEdgeKind,
+      tiebreakStackEdge,
+    };
+  }
+
+  const progressCertified = hasCertifiedRiskProgress(candidate);
+  const flatOrLoopAdjacent =
+    candidate.isManualUnfreeze === true ||
+    candidate.isRepetition ||
+    candidate.isSelfUndo ||
+    (candidate.mobilityDelta <= 0 &&
+      !candidate.tags.includes('decompress') &&
+      !candidate.tags.includes('openLane'));
+  const edgeSeverity =
+    tiebreakEdgeKind === 'behind'
+      ? tiebreakCheckerEdge < 0
+        ? 1
+        : 0.6
+      : 0.45;
+  const fallbackScale = tiebreakEdgeKind === 'behind' ? 0.25 : 0.15;
+  const drawTrapRisk =
+    flatOrLoopAdjacent && !progressCertified
+      ? clamp(drawPressure * edgeSeverity, 0, 1)
+      : clamp(drawPressure * edgeSeverity * fallbackScale, 0, 1);
+
+  return {
+    drawPressure,
+    drawTrapRisk,
+    tiebreakCheckerEdge,
+    tiebreakEdgeKind,
+    tiebreakStackEdge,
+  };
 }
 
 /**
@@ -321,6 +409,39 @@ export function getDynamicDrawScore(
   return drawScore;
 }
 
+export function getNonterminalDrawTrapBias(
+  state: EngineState,
+  perspectivePlayer: Player,
+  preset: AiDifficultyPreset | null,
+  riskMode: AiRiskMode,
+  diagnostics: AiSearchDiagnostics | null = null,
+): number {
+  if (!preset || state.status === 'gameOver') {
+    return 0;
+  }
+
+  const profile = getTiebreakPressureProfile(state, perspectivePlayer, riskMode);
+
+  if (profile.tiebreakEdgeKind === 'ahead') {
+    return 0;
+  }
+
+  const severity =
+    profile.tiebreakEdgeKind === 'behind'
+      ? profile.tiebreakCheckerEdge < 0
+        ? 1
+        : 0.6
+      : 0.45;
+  const escalationMultiplier = riskMode === 'late' ? 1.5 : riskMode === 'stagnation' ? 1.2 : 1;
+  const penalty = Math.round(-preset.drawAversionAhead * severity * profile.drawPressure * escalationMultiplier);
+
+  if (penalty !== 0 && diagnostics) {
+    diagnostics.adverseDrawTrapPenalties += 1;
+  }
+
+  return penalty;
+}
+
 /**
  * Risk mode should only favor lines that create measurable progress.
  *
@@ -386,6 +507,14 @@ export function getRiskCandidateAdjustment(
 
   if (candidate.isSelfUndo && !candidate.isForced) {
     adjustment -= Math.round(preset.riskLoopPenalty * 1.15);
+  }
+
+  if ((candidate.drawTrapRisk ?? 0) > 0 && candidate.tiebreakEdgeKind === 'behind' && !candidate.isForced) {
+    adjustment -= Math.round(
+      preset.riskLoopPenalty *
+        (riskMode === 'late' ? 1.5 : 1.25) *
+        Math.max(0.35, candidate.drawTrapRisk ?? 0),
+    );
   }
 
   return Math.round(adjustment * riskMultiplier);

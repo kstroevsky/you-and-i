@@ -6,7 +6,6 @@ import { withConfig } from '@/test/factories';
 
 import {
   actionKey,
-  createOpponentThreatState,
   createTickingClock,
   createTimeoutClock,
 } from '@/ai/test/searchTestUtils';
@@ -43,7 +42,7 @@ describe('computer opponent search timeouts', () => {
 
   it('falls back to partial current-depth search work instead of blind legal-order fallback on timeout', () => {
     const config = withConfig();
-    const state = createOpponentThreatState();
+    const state = createInitialState(config);
     const legalActions = getLegalActions(state, config);
     const orderedRootMoves = orderMoves(
       state,

@@ -4,6 +4,7 @@ import type { ParticipationState } from '@/ai/participation';
 import type { EngineState, TurnAction } from '@/domain';
 
 import {
+  getSelectiveExtension,
   getMovePenalty,
   getPreviousOwnActionFromLine,
   getPreviousOwnPositionKeyFromLine,
@@ -91,6 +92,7 @@ export function negamax(
     historyScores: context.historyScores,
     killerMoves: context.killerMovesByDepth.get(currentDepth) ?? [],
     now: context.now,
+    diagnostics: context.diagnostics,
     participationState,
     policyPriors: null,
     previousStrategicTags: currentDepth === 0 ? context.rootPreviousStrategicTags : null,
@@ -138,13 +140,15 @@ export function negamax(
       },
     ];
     const keepsTurn = entry.nextState.currentPlayer === state.currentPlayer;
+    const extension = getSelectiveExtension(entry, depth, currentDepth);
+    const nextDepth = Math.max(0, depth - 1 + extension);
     let score: number;
 
     if (!searchedFirstChild) {
       score = keepsTurn
         ? negamax(
             entry.nextState,
-            depth - 1,
+            nextDepth,
             alpha,
             beta,
             currentDepth + 1,
@@ -155,7 +159,7 @@ export function negamax(
           )
         : -negamax(
             entry.nextState,
-            depth - 1,
+            nextDepth,
             -beta,
             -alpha,
             currentDepth + 1,
@@ -169,7 +173,7 @@ export function negamax(
       score = keepsTurn
         ? negamax(
             entry.nextState,
-            depth - 1,
+            nextDepth,
             alpha,
             alpha + 1,
             currentDepth + 1,
@@ -180,7 +184,7 @@ export function negamax(
           )
         : -negamax(
             entry.nextState,
-            depth - 1,
+            nextDepth,
             -alpha - 1,
             -alpha,
             currentDepth + 1,
@@ -195,7 +199,7 @@ export function negamax(
         score = keepsTurn
           ? negamax(
               entry.nextState,
-              depth - 1,
+              nextDepth,
               alpha,
               beta,
               currentDepth + 1,
@@ -206,7 +210,7 @@ export function negamax(
             )
           : -negamax(
               entry.nextState,
-              depth - 1,
+              nextDepth,
               -beta,
               -alpha,
               currentDepth + 1,

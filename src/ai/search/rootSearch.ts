@@ -13,6 +13,7 @@ import type { AiSearchResult, ChooseComputerActionRequest } from '@/ai/types';
 import { getLegalActions, type TurnAction } from '@/domain';
 
 import {
+  getSelectiveExtension,
   getMovePenalty,
   getRootPreviousOwnAction,
   getRootPreviousStrategicTags,
@@ -38,6 +39,7 @@ import type { RootRankedAction, SearchContext, TranspositionEntry } from '@/ai/s
 function createRootFallbackCandidate(
   entry: {
     action: TurnAction;
+    drawTrapRisk?: number;
     emptyCellsDelta?: number;
     freezeSwingBonus?: number;
     homeFieldDelta?: number;
@@ -48,12 +50,14 @@ function createRootFallbackCandidate(
     repeatedPositionCount?: number;
     sixStackDelta?: number;
     sourceFamily: string;
+    tiebreakEdgeKind?: AiSearchResult['rootCandidates'][number]['tiebreakEdgeKind'];
   },
   score: number,
   strategicIntent: AiSearchResult['strategicIntent'],
 ): RootRankedAction {
   return {
     action: entry.action,
+    drawTrapRisk: entry.drawTrapRisk ?? 0,
     emptyCellsDelta: entry.emptyCellsDelta ?? 0,
     freezeSwingBonus: entry.freezeSwingBonus ?? 0,
     homeFieldDelta: entry.homeFieldDelta ?? 0,
@@ -72,6 +76,7 @@ function createRootFallbackCandidate(
     sixStackDelta: entry.sixStackDelta ?? 0,
     sourceFamily: entry.sourceFamily,
     tags: [],
+    tiebreakEdgeKind: entry.tiebreakEdgeKind ?? 'tied',
   };
 }
 
@@ -88,11 +93,14 @@ function hasRiskWorthwhileRootCandidate(
       !entry.isForced &&
       !entry.isRepetition &&
       !entry.isSelfUndo &&
+      entry.drawTrapRisk < 0.72 &&
       hasCertifiedRiskProgress({
+        drawTrapRisk: entry.drawTrapRisk,
         emptyCellsDelta: entry.emptyCellsDelta,
         freezeSwingBonus: entry.freezeSwingBonus,
         homeFieldDelta: entry.homeFieldDelta,
         isForced: entry.isForced,
+        isManualUnfreeze: entry.action.type === 'manualUnfreeze',
         isRepetition: entry.isRepetition,
         isSelfUndo: entry.isSelfUndo,
         isTactical: entry.isTactical,
@@ -100,6 +108,7 @@ function hasRiskWorthwhileRootCandidate(
         repeatedPositionCount: entry.repeatedPositionCount,
         sixStackDelta: entry.sixStackDelta,
         tags: entry.tags,
+        tiebreakEdgeKind: entry.tiebreakEdgeKind,
       }),
   );
 }
@@ -136,6 +145,7 @@ function toFallbackRanked(
   return sortRankedActions(
     orderedMoves.map((entry) => ({
       action: entry.action,
+      drawTrapRisk: entry.drawTrapRisk,
       emptyCellsDelta: entry.emptyCellsDelta,
       freezeSwingBonus: entry.freezeSwingBonus,
       homeFieldDelta: entry.homeFieldDelta,
@@ -154,6 +164,7 @@ function toFallbackRanked(
       sixStackDelta: entry.sixStackDelta,
       sourceFamily: entry.sourceFamily,
       tags: entry.tags,
+      tiebreakEdgeKind: entry.tiebreakEdgeKind,
     })),
   );
 }
@@ -202,6 +213,7 @@ export function chooseComputerAction({
       actions: legalActions,
       behaviorProfile,
       deadline: useDeadline ? deadline : undefined,
+      diagnostics,
       grandparentPositionKey: rootSelfUndoPositionKey,
       now: useDeadline ? now : undefined,
       participationState: rootParticipationState,
@@ -359,6 +371,7 @@ export function chooseComputerAction({
             [
               {
                 action: entry.action,
+                drawTrapRisk: entry.drawTrapRisk,
                 emptyCellsDelta: entry.emptyCellsDelta,
                 freezeSwingBonus: entry.freezeSwingBonus,
                 homeFieldDelta: entry.homeFieldDelta,
@@ -377,6 +390,7 @@ export function chooseComputerAction({
                 sixStackDelta: entry.sixStackDelta,
                 sourceFamily: entry.sourceFamily,
                 tags: entry.tags,
+                tiebreakEdgeKind: entry.tiebreakEdgeKind,
               },
             ],
             preset.rootCandidateLimit,
@@ -461,7 +475,7 @@ export function chooseComputerAction({
       let score = keepsTurn
         ? negamax(
             entry.nextState,
-            depth - 1,
+            Math.max(0, depth - 1 + getSelectiveExtension(entry, depth, 0)),
             alphaWindow,
             betaWindow,
             1,
@@ -478,7 +492,7 @@ export function chooseComputerAction({
           )
         : -negamax(
             entry.nextState,
-            depth - 1,
+            Math.max(0, depth - 1 + getSelectiveExtension(entry, depth, 0)),
             -betaWindow,
             -alphaWindow,
             1,
@@ -498,6 +512,7 @@ export function chooseComputerAction({
 
       ranked.push({
         action: entry.action,
+        drawTrapRisk: entry.drawTrapRisk,
         emptyCellsDelta: entry.emptyCellsDelta,
         freezeSwingBonus: entry.freezeSwingBonus,
         homeFieldDelta: entry.homeFieldDelta,
@@ -516,6 +531,7 @@ export function chooseComputerAction({
         sixStackDelta: entry.sixStackDelta,
         sourceFamily: entry.sourceFamily,
         tags: entry.tags,
+        tiebreakEdgeKind: entry.tiebreakEdgeKind,
       });
     }
 

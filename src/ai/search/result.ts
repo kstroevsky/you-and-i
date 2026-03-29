@@ -17,6 +17,7 @@ import type { RootRankedAction, SearchContext } from '@/ai/search/types';
 /** Creates the empty diagnostics payload used for all search results. */
 export function createSearchDiagnostics(): AiSearchDiagnostics {
   return {
+    adverseDrawTrapPenalties: 0,
     aspirationResearches: 0,
     betaCutoffs: 0,
     drawAversionApplications: 0,
@@ -51,6 +52,7 @@ export function createEmptyResult(action: TurnAction | null, score: number): AiS
       ? [
           {
             action,
+            drawTrapRisk: 0,
             emptyCellsDelta: 0,
             forced: false,
             freezeSwingBonus: 0,
@@ -69,6 +71,7 @@ export function createEmptyResult(action: TurnAction | null, score: number): AiS
             sixStackDelta: 0,
             sourceFamily: 'none',
             tags: [],
+            tiebreakEdgeKind: 'tied',
           },
         ]
       : [],
@@ -154,18 +157,22 @@ export function selectCandidateAction(
       (entry) =>
         !entry.isForced &&
         !entry.isSelfUndo &&
-        !entry.isRepetition,
+        !entry.isRepetition &&
+        entry.drawTrapRisk < 0.95,
     )
     .slice(0, Math.max(preset.varietyTopCount * 6, preset.varietyTopCount));
   const riskCertifiedCandidates =
     riskMode === 'normal'
       ? rerankEligibleCandidates
       : rerankEligibleCandidates.filter((entry) =>
+          entry.drawTrapRisk < 0.72 &&
           hasCertifiedRiskProgress({
+            drawTrapRisk: entry.drawTrapRisk,
             emptyCellsDelta: entry.emptyCellsDelta,
             freezeSwingBonus: entry.freezeSwingBonus,
             homeFieldDelta: entry.homeFieldDelta,
             isForced: entry.isForced,
+            isManualUnfreeze: entry.action.type === 'manualUnfreeze',
             isRepetition: entry.isRepetition,
             isSelfUndo: entry.isSelfUndo,
             isTactical: entry.isTactical,
@@ -173,6 +180,7 @@ export function selectCandidateAction(
             repeatedPositionCount: entry.repeatedPositionCount,
             sixStackDelta: entry.sixStackDelta,
             tags: entry.tags,
+            tiebreakEdgeKind: entry.tiebreakEdgeKind,
           }),
         );
   const rerankCandidates = riskMode === 'normal' ? rerankEligibleCandidates : riskCertifiedCandidates;
@@ -223,10 +231,12 @@ export function selectCandidateAction(
         ? 0
         : getRiskCandidateAdjustment(
             {
+              drawTrapRisk: entry.drawTrapRisk,
               emptyCellsDelta: entry.emptyCellsDelta,
               freezeSwingBonus: entry.freezeSwingBonus,
               homeFieldDelta: entry.homeFieldDelta,
               isForced: entry.isForced,
+              isManualUnfreeze: entry.action.type === 'manualUnfreeze',
               isRepetition: entry.isRepetition,
               isSelfUndo: entry.isSelfUndo,
               isTactical: entry.isTactical,
@@ -234,9 +244,18 @@ export function selectCandidateAction(
               repeatedPositionCount: entry.repeatedPositionCount,
               sixStackDelta: entry.sixStackDelta,
               tags: entry.tags,
+              tiebreakEdgeKind: entry.tiebreakEdgeKind,
             },
             preset,
             riskMode,
+          );
+    const drawTrapPenalty =
+      entry.isForced || entry.drawTrapRisk <= 0
+        ? 0
+        : Math.round(
+            Math.max(180, preset.riskLoopPenalty * 1.1) *
+              entry.drawTrapRisk *
+              (entry.tiebreakEdgeKind === 'behind' ? 1 : 0.35),
           );
     const diversityBonus = entry.tags.some((tag) => !coveredTags.has(tag)) ? 40 : 0;
     const familyBonus = coveredFamilies.has(entry.sourceFamily) ? 0 : 55;
@@ -272,6 +291,7 @@ export function selectCandidateAction(
       Math.round(entry.participationDelta * 0.2) +
       Math.round(entry.policyPrior * 40) +
       riskBonus +
+      -drawTrapPenalty +
       (entry.intent === 'hybrid' ? 15 : 0) -
       index * 5;
 

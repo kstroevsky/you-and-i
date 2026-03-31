@@ -539,3 +539,4 @@ This file is the canonical rule-engine and invariant reference. For adjacent con
 - runtime store, worker, and hydration: [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
 - AI architecture and search pipeline: [`../ai/README.md`](../ai/README.md)
 - exact AI formulas: [`../ai/HEURISTICS.md`](../ai/HEURISTICS.md)
+- cross-layer algorithm explanations and trade-offs: [`../../docs/ALGORITHMS.md`](../../docs/ALGORITHMS.md)

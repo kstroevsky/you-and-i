@@ -26,9 +26,10 @@ The repository documentation is intentionally split by subsystem.
 3. [`src/domain/README.md`](./src/domain/README.md): canonical rules-engine and invariant reference.
 4. [`src/ai/README.md`](./src/ai/README.md): AI architecture, search pipeline, model integration, and academic lineage.
 5. [`src/ai/HEURISTICS.md`](./src/ai/HEURISTICS.md): exact scoring, ordering, tagging, and participation formulas.
-6. [`src/ui/README.md`](./src/ui/README.md): presentation-layer and localization strategy.
-7. [`docs/INFRASTRUCTURE.md`](./docs/INFRASTRUCTURE.md): PWA/runtime caching and generated report tooling.
-8. [`training/README.md`](./training/README.md): offline dataset and training path for the optional neural guidance model.
+6. [`docs/ALGORITHMS.md`](./docs/ALGORITHMS.md): step-by-step algorithm explanations, project context, and trade-offs across search, rules, diagnostics, and training.
+7. [`src/ui/README.md`](./src/ui/README.md): presentation-layer and localization strategy.
+8. [`docs/INFRASTRUCTURE.md`](./docs/INFRASTRUCTURE.md): PWA/runtime caching and generated report tooling.
+9. [`training/README.md`](./training/README.md): offline dataset and training path for the optional neural guidance model.
 
 ## System Map
 
@@ -156,6 +157,7 @@ The repository now has three algorithmically important layers, each documented i
 - Domain algorithms in [`src/domain/README.md`](./src/domain/README.md): explicit action-union legality generation, identity-based jump continuation, two-phase terminal resolution, structural sharing for immutable board transitions, canonical hashing, and keyed pure-summary reuse for scoring and tiebreak metrics.
 - AI algorithms in [`src/ai/README.md`](./src/ai/README.md): iterative deepening negamax, alpha-beta pruning, principal-variation re-search, quiescence, structural and participation heuristics, hidden personas, tiebreak-aware draw-pressure shaping, and lazy per-search summary caching with keyed legal-action reuse.
 - Training and model algorithms in [`training/README.md`](./training/README.md) and [`public/models/README.md`](./public/models/README.md): offline residual policy/value training, fixed masked action-space encoding, and optional ONNX policy-prior guidance at runtime.
+- The algorithm bridge in [`docs/ALGORITHMS.md`](./docs/ALGORITHMS.md): step-by-step logic, in-project meaning, and trade-offs across those layers without duplicating every exact coefficient.
 
 That split is intentional. The project does not have one monolithic "algorithm" document because rule semantics, browser search, and offline model training solve different problems with different constraints.
 
@@ -225,5 +227,6 @@ All `*:compare` wrappers accept `--before=<ref|working>` and `--after=<ref|worki
 - Exact rules and invariants: [`src/domain/README.md`](./src/domain/README.md)
 - AI architecture and references: [`src/ai/README.md`](./src/ai/README.md)
 - Exact heuristic formulas: [`src/ai/HEURISTICS.md`](./src/ai/HEURISTICS.md)
+- Step-by-step algorithm explanations: [`docs/ALGORITHMS.md`](./docs/ALGORITHMS.md)
 - Runtime store and persistence: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
 - PWA/report tooling: [`docs/INFRASTRUCTURE.md`](./docs/INFRASTRUCTURE.md)

@@ -96,4 +96,4 @@ python3 training/train_policy_value.py \
 - Because the runtime currently consumes only policy priors, a stronger value head improves diagnostics first and move choice only indirectly.
 - The runtime's decisive-play logic is partly heuristic by design: draw aversion, stagnation detection, and root reranking remain classical search behavior even when a model file exists.
 
-For the runtime loading path and fallback behavior, see [`public/models/README.md`](../public/models/README.md) and [`src/ai/README.md`](../src/ai/README.md).
+For the runtime loading path and fallback behavior, see [`../public/models/README.md`](../public/models/README.md), [`../src/ai/README.md`](../src/ai/README.md), and the cross-layer algorithm guide in [`../docs/ALGORITHMS.md`](../docs/ALGORITHMS.md).

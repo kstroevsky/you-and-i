@@ -201,8 +201,9 @@ Both of those rely on:
 The exact formulas are intentionally kept in the dedicated appendix:
 
 - [`HEURISTICS.md`](./HEURISTICS.md)
+- [`../../docs/ALGORITHMS.md`](../../docs/ALGORITHMS.md)
 
-That separation matters. This README explains architecture, data flow, and lineage. `HEURISTICS.md` is the exact coefficient and formula reference.
+That separation matters. This README explains architecture, data flow, and lineage. `HEURISTICS.md` is the exact coefficient and formula reference, while [`../../docs/ALGORITHMS.md`](../../docs/ALGORITHMS.md) is the step-by-step algorithm explanation and trade-off guide across search, rules, and training.
 
 ### `moveOrdering.ts`
 
@@ -785,4 +786,4 @@ The repository is not a direct reproduction of any single paper. The table below
 
 ## Boundary Of This Document
 
-This README explains architecture, runtime flow, and lineage. Exact heuristic coefficients and formulas live in [`HEURISTICS.md`](./HEURISTICS.md). Exact rule semantics live in [`../domain/README.md`](../domain/README.md).
+This README explains architecture, runtime flow, and lineage. Exact heuristic coefficients and formulas live in [`HEURISTICS.md`](./HEURISTICS.md). Exact rule semantics live in [`../domain/README.md`](../domain/README.md). Cross-layer algorithm walkthroughs live in [`../../docs/ALGORITHMS.md`](../../docs/ALGORITHMS.md).

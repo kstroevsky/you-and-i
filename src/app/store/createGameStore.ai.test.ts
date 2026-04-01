@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AI_DIFFICULTY_PRESETS } from '@/ai';
 import { createGameStore } from '@/app/store/createGameStore';
+import {
+  AI_COLD_START_BUFFER_MS,
+  AI_SLOW_DEVICE_BUFFER_MS,
+} from '@/app/store/createGameStore/aiController';
 import { AI_MOVE_REVEAL_MS, AI_WATCHDOG_BUFFER_MS } from '@/app/store/createGameStore/constants';
 import { applyAction, createInitialState, getLegalActions, type TurnAction } from '@/domain';
 import type { MatchSettings } from '@/shared/types/session';
@@ -22,9 +26,9 @@ import {
   FakeAiWorker,
 } from '@/app/store/createGameStore.testUtils';
 
-const AI_COLD_START_BUFFER_MS = 1500;
 const EASY_WATCHDOG_MS = AI_DIFFICULTY_PRESETS.easy.timeBudgetMs + AI_WATCHDOG_BUFFER_MS;
 const EASY_COLD_START_WATCHDOG_MS = EASY_WATCHDOG_MS + AI_COLD_START_BUFFER_MS;
+const EASY_SLOW_RETRY_WATCHDOG_MS = EASY_WATCHDOG_MS + AI_COLD_START_BUFFER_MS + AI_SLOW_DEVICE_BUFFER_MS;
 
 function commitTurnAction(store: ReturnType<typeof createGameStore>, action: TurnAction): void {
   const state = store.getState();
@@ -189,7 +193,13 @@ describe('createGameStore AI integration', () => {
 
     vi.advanceTimersByTime(EASY_WATCHDOG_MS + 1);
 
+    // Warm watchdog fired → silent auto-retry; still thinking, worker replaced.
     expect(worker.terminated).toBe(true);
+    expect(store.getState().aiStatus).toBe('thinking');
+
+    // Exhaust the auto-retry budget (cold-start + slow-device window).
+    vi.advanceTimersByTime(EASY_SLOW_RETRY_WATCHDOG_MS + 1);
+
     expect(store.getState().aiStatus).toBe('error');
   });
 
@@ -490,19 +500,29 @@ describe('createGameStore AI integration', () => {
 
     vi.advanceTimersByTime(EASY_WATCHDOG_MS + 1);
 
+    // Still within the cold-start buffer – watchdog has not fired yet.
     expect(workers[0]?.terminated).toBe(false);
     expect(store.getState().aiStatus).toBe('thinking');
 
     vi.advanceTimersByTime(AI_COLD_START_BUFFER_MS);
 
+    // First watchdog fired → silent auto-retry; workers[1] created.
     expect(workers[0]?.terminated).toBe(true);
+    expect(workers).toHaveLength(2);
+    expect(store.getState().aiStatus).toBe('thinking');
+
+    // Exhaust the single auto-retry (cold-start + slow-device window).
+    vi.advanceTimersByTime(EASY_SLOW_RETRY_WATCHDOG_MS + 1);
+
+    expect(workers[1]?.terminated).toBe(true);
     expect(store.getState().aiStatus).toBe('error');
 
+    // Manual retry after the error is still possible.
     store.getState().retryComputerMove();
 
     expect(store.getState().aiStatus).toBe('thinking');
-    expect(workers).toHaveLength(2);
-    expect(workers[1]?.requests).toHaveLength(1);
+    expect(workers).toHaveLength(3);
+    expect(workers[2]?.requests).toHaveLength(1);
   });
 
   it('ignores stale AI replies after restarting the worker', () => {
@@ -528,6 +548,7 @@ describe('createGameStore AI integration', () => {
     const firstWorker = workers[0];
     const staleRequestId = firstWorker?.requests[0]?.requestId;
 
+    // The watchdog fires and auto-retries silently; retryComputerMove is a no-op here.
     vi.advanceTimersByTime(EASY_COLD_START_WATCHDOG_MS + 1);
     store.getState().retryComputerMove();
 

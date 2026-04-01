@@ -15,7 +15,7 @@ export const LEGACY_RULE_DEFAULTS: RuleConfig = {
 };
 
 /** Small grace period added on top of the AI preset time budget. */
-export const AI_WATCHDOG_BUFFER_MS = 250;
+export const AI_WATCHDOG_BUFFER_MS = 800;
 
 /** Short pause after an AI-authored move before the next AI turn is scheduled. */
 export const AI_MOVE_REVEAL_MS = 300;

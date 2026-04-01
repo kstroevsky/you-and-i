@@ -24,7 +24,26 @@ type AiControllerOptions = {
   set: StoreSetter;
 };
 
-const AI_COLD_START_BUFFER_MS = 1500;
+/** Extra cold-start allowance for the first request on a fresh worker. */
+export const AI_COLD_START_BUFFER_MS = 2500;
+
+/**
+ * Maximum number of silent auto-retries before surfacing an error to the user.
+ * One retry lets a single transient stall on a slow device recover invisibly.
+ */
+export const AI_AUTO_RETRY_LIMIT = 2;
+
+/**
+ * Additional watchdog time granted after the device has shown signs of being
+ * slow (previous move timed out or finished above the slow-device threshold).
+ */
+export const AI_SLOW_DEVICE_BUFFER_MS = 500;
+
+/**
+ * Fraction of the time budget that, when exceeded by the previous move, marks
+ * the device as slow for the next watchdog calculation.
+ */
+const AI_SLOW_DEVICE_THRESHOLD = 0.75;
 
 /** Owns the AI worker, request ids, and watchdog for one store instance. */
 export function createAiController({ commitAction, get, options, set }: AiControllerOptions) {
@@ -33,6 +52,13 @@ export function createAiController({ commitAction, get, options, set }: AiContro
   let aiRevealTimeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
   let aiWorkerIsWarm = false;
   let nextAiRequestId = 1;
+
+  /** Elapsed ms of the most recent completed search, or null if unknown. */
+  let lastAiElapsedMs: number | null = null;
+  /** Whether the most recent completed search internally timed out. */
+  let lastAiTimedOut = false;
+  /** Number of silent auto-retries attempted for the current computer turn. */
+  let aiAutoRetryCount = 0;
 
   function clearAiWatchdog(): void {
     if (aiWatchdogId === null) {
@@ -86,8 +112,17 @@ export function createAiController({ commitAction, get, options, set }: AiContro
       return;
     }
 
-    aiWorkerIsWarm = true;
+    lastAiTimedOut = true;
     disposeAiWorker();
+
+    if (aiAutoRetryCount < AI_AUTO_RETRY_LIMIT) {
+      aiAutoRetryCount += 1;
+      set({ aiError: null, aiStatus: 'idle', pendingAiRequestId: null });
+      syncComputerTurn();
+      return;
+    }
+
+    aiAutoRetryCount = 0;
     set({
       aiError: 'Computer move timed out.',
       aiStatus: 'error',
@@ -102,10 +137,16 @@ export function createAiController({ commitAction, get, options, set }: AiContro
       return;
     }
 
+    const preset = AI_DIFFICULTY_PRESETS[matchSettings.aiDifficulty];
+    const isSlowDevice =
+      lastAiTimedOut ||
+      (lastAiElapsedMs !== null && lastAiElapsedMs > preset.timeBudgetMs * AI_SLOW_DEVICE_THRESHOLD);
+
     const timeoutMs =
-      AI_DIFFICULTY_PRESETS[matchSettings.aiDifficulty].timeBudgetMs +
+      preset.timeBudgetMs +
       AI_WATCHDOG_BUFFER_MS +
-      (aiWorkerIsWarm ? 0 : AI_COLD_START_BUFFER_MS);
+      (aiWorkerIsWarm ? 0 : AI_COLD_START_BUFFER_MS) +
+      (isSlowDevice ? AI_SLOW_DEVICE_BUFFER_MS : 0);
 
     aiWatchdogId = globalThis.setTimeout(
       () => handleAiWatchdogTimeout(requestId),
@@ -166,6 +207,10 @@ export function createAiController({ commitAction, get, options, set }: AiContro
         });
         return;
       }
+
+      lastAiElapsedMs = message.result.elapsedMs;
+      lastAiTimedOut = message.result.timedOut;
+      aiAutoRetryCount = 0;
 
       if (!message.result.action) {
         set({

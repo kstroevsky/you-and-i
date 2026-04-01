@@ -11,7 +11,7 @@ import {
   getPreviousOwnActionFromLine,
   getPreviousOwnPositionKeyFromLine,
 } from '@/ai/search/heuristics';
-import { makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
+import { actionId, makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
 import type { SearchContext, SearchLineEntry } from '@/ai/search/types';
 
 /** Chooses forcing moves only for the quiescence tail below the main search frontier. */
@@ -19,7 +19,7 @@ export function getQuiescenceMoves(
   state: EngineState,
   currentDepth: number,
   searchLine: SearchLineEntry[],
-  previousActionKey: string | null,
+  previousActionId: number | null,
   participationState: ParticipationState,
   context: SearchContext,
 ): OrderedAction[] {
@@ -56,6 +56,7 @@ export function getQuiescenceMoves(
     return [];
   }
 
+  const ttBestAction = context.table.get(makeTableKey(state))?.bestAction ?? null;
   const ordered = orderMoves(state, state.currentPlayer, context.ruleConfig, context.preset, {
     actions: candidateActions,
     behaviorProfile: context.behaviorProfile,
@@ -67,15 +68,15 @@ export function getQuiescenceMoves(
     ),
     historyScores: context.historyScores,
     includeAllQuietMoves: true,
-    killerMoves: context.killerMovesByDepth.get(currentDepth) ?? [],
+    killerIds: context.killerMovesByDepth.get(currentDepth) ?? [],
     now: context.now,
     diagnostics: context.diagnostics,
     participationState,
     perfCache: context.perfCache,
     policyPriors: null,
     previousStrategicTags: null,
-    previousActionKey,
-    pvMove: context.pvMoveByDepth.get(currentDepth),
+    previousActionId,
+    pvMoveId: context.pvMoveByDepth.get(currentDepth) ?? null,
     repetitionPenalty: context.preset.repetitionPenalty,
     riskMode: context.riskMode,
     samePlayerPreviousAction: getPreviousOwnActionFromLine(
@@ -85,7 +86,7 @@ export function getQuiescenceMoves(
     ),
     selfUndoPenalty: context.preset.selfUndoPenalty,
     continuationScores: context.continuationScores,
-    ttMove: context.table.get(makeTableKey(state))?.bestAction,
+    ttMoveId: ttBestAction ? actionId(ttBestAction) : null,
   });
 
   if (candidateActions.length === 1) {
@@ -108,7 +109,7 @@ export function quiescence(
   beta: number,
   currentDepth: number,
   searchLine: SearchLineEntry[],
-  previousActionKey: string | null,
+  previousActionId: number | null,
   participationState: ParticipationState,
   context: SearchContext,
 ): number {
@@ -144,7 +145,7 @@ export function quiescence(
     state,
     currentDepth,
     searchLine,
-    previousActionKey,
+    previousActionId,
     participationState,
     context,
   );
@@ -172,7 +173,7 @@ export function quiescence(
           beta,
           currentDepth + 1,
           nextSearchLine,
-          entry.serializedAction,
+          entry.actionId,
           entry.nextParticipationState,
           context,
         )
@@ -182,7 +183,7 @@ export function quiescence(
           -alpha,
           currentDepth + 1,
           nextSearchLine,
-          entry.serializedAction,
+          entry.actionId,
           entry.nextParticipationState,
           context,
         );

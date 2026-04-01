@@ -1,5 +1,6 @@
 import type { EngineState, TurnAction } from '@/domain';
 
+import { encodeActionIndex } from '@/ai/model/actionSpace';
 import { zobristHash } from '@/ai/search/zobristHash';
 
 /** Shared timeout sentinel used across search and move ordering. */
@@ -15,6 +16,11 @@ export function actionKey(action: TurnAction): string {
     default:
       return `${action.type}:${action.source}:${action.target}`;
   }
+}
+
+/** Returns the fixed numeric ID for an action in the AI model action space, or -1 if unrepresentable. */
+export function actionId(action: TurnAction): number {
+  return encodeActionIndex(action) ?? -1;
 }
 
 /** Detects the sentinel timeout error produced by the search engine. */

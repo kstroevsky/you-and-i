@@ -1,7 +1,7 @@
 import type { InferenceSession, Tensor } from 'onnxruntime-web';
 import type * as Ort from 'onnxruntime-web';
 
-import { buildMaskedActionPriors } from '@/ai/model/actionSpace';
+import { AI_MODEL_ACTION_COUNT, buildMaskedActionPriors } from '@/ai/model/actionSpace';
 import { encodeStateForModel } from '@/ai/model/encoding';
 import type { AiModelGuidance } from '@/ai/types';
 import { getLegalActions, type EngineState, type RuleConfig } from '@/domain';
@@ -161,7 +161,7 @@ export async function getModelGuidance(
     const actionPriors =
       policyData?.length
         ? buildMaskedActionPriors(legalActions, policyData)
-        : {};
+        : new Float32Array(AI_MODEL_ACTION_COUNT);
 
     return {
       actionPriors,

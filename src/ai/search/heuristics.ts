@@ -1,9 +1,9 @@
 import type { OrderedAction } from '@/ai/moveOrdering';
+import { AI_MODEL_ACTION_COUNT } from '@/ai/model/actionSpace';
 import { getActionStrategicProfile } from '@/ai/strategy';
 import type { AiRootCandidate, AiStrategicTag } from '@/ai/types';
 import type { EngineState, Player, TurnAction } from '@/domain';
 
-import { actionKey } from '@/ai/search/shared';
 import type {
   RootRankedAction,
   SearchContext,
@@ -77,21 +77,26 @@ export function rememberCutoffMove(
   entry: OrderedAction,
   depth: number,
   currentDepth: number,
-  previousActionKey: string | null,
+  previousActionId: number | null,
   context: SearchContext,
 ): void {
   if (entry.isTactical) {
     return;
   }
 
-  const serialized = entry.serializedAction;
+  const id = entry.actionId;
+
+  if (id < 0) {
+    return;
+  }
+
   const bonus = Math.max(1, depth * depth);
-  const historyScore = context.historyScores.get(serialized) ?? 0;
+  const historyScore = context.historyScores.get(id) ?? 0;
 
-  context.historyScores.set(serialized, Math.min(32_000, historyScore + bonus * 24));
+  context.historyScores.set(id, Math.min(32_000, historyScore + bonus * 24));
 
-  if (previousActionKey) {
-    const continuationKey = `${previousActionKey}->${serialized}`;
+  if (previousActionId !== null && previousActionId >= 0) {
+    const continuationKey = previousActionId * AI_MODEL_ACTION_COUNT + id;
     const continuationScore = context.continuationScores.get(continuationKey) ?? 0;
 
     context.continuationScores.set(
@@ -102,11 +107,11 @@ export function rememberCutoffMove(
 
   const killers = context.killerMovesByDepth.get(currentDepth) ?? [];
 
-  if (killers.some((killer) => actionKey(killer) === serialized)) {
+  if (killers.includes(id)) {
     return;
   }
 
-  context.killerMovesByDepth.set(currentDepth, [entry.action, ...killers].slice(0, 2));
+  context.killerMovesByDepth.set(currentDepth, [id, ...killers].slice(0, 2));
 }
 
 /** Converts internal ranked-root data into the public diagnostic result shape. */

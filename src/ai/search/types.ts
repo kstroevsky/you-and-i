@@ -54,17 +54,19 @@ export type RootRankedAction = Pick<
 
 export type SearchContext = {
   behaviorProfile: AiBehaviorProfile | null;
-  continuationScores: Map<string, number>;
+  /** Keyed by (previousActionId * AI_MODEL_ACTION_COUNT + actionId). */
+  continuationScores: Map<number, number>;
   deadline: number;
   diagnostics: AiSearchDiagnostics;
   evaluatedNodes: number;
-  historyScores: Map<string, number>;
-  killerMovesByDepth: Map<number, TurnAction[]>;
+  historyScores: Map<number, number>;
+  killerMovesByDepth: Map<number, number[]>;
   now: () => number;
   perfCache: SearchPerfCache;
   preset: AiDifficultyPreset;
-  policyPriors: Record<string, number> | null;
-  pvMoveByDepth: Map<number, TurnAction>;
+  policyPriors: Float32Array | null;
+  /** Maps search depth to the numeric action ID of the PV move at that depth. */
+  pvMoveByDepth: Map<number, number>;
   riskMode: AiRiskMode;
   rootParticipationState: ParticipationState;
   rootPlayer: Player;

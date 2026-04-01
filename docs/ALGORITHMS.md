@@ -533,7 +533,7 @@ Step by step:
 Implementation notes:
 
 - TT ordering is often the strongest single dynamic ordering hint.
-- It uses action identity through serialized action keys.
+- Action identity is compared via numeric action IDs (the same fixed lattice indices used by the neural model's policy head, via `encodeActionIndex`).
 
 ### 2.3 History Heuristic
 
@@ -557,13 +557,14 @@ when ordering:
 Step by step:
 
 1. Observe a quiet move that caused a beta cutoff.
-2. Credit that move in a global history table keyed by serialized action.
+2. Credit that move in a global `Map<number, number>` history table keyed by numeric action ID.
 3. Reuse that credit later when the same action appears in a different subtree.
 
 Implementation notes:
 
 - Used only as an ordering hint, never as proof of move quality.
 - Especially useful when tactical structure repeats across different subtrees.
+- History and continuation tables are keyed by numeric action IDs (`encodeActionIndex`) rather than serialized strings. This eliminates string allocation on every lookup, which is a significant inner-loop optimization.
 
 ### 2.4 Killer Heuristic
 
@@ -595,6 +596,7 @@ Implementation notes:
 
 - Works well because sibling nodes often share tactical motifs.
 - YOUI stores multiple killers per depth, not only one.
+- Killers are stored as numeric action IDs (`number[]`) rather than `TurnAction[]`, making depth-indexed lookup and equality checks trivially cheap.
 
 ### 2.5 Continuation Heuristic
 
@@ -625,6 +627,7 @@ Implementation notes:
 
 - Stronger than plain history when move value depends on prior sequence context.
 - Useful in YOUI because jump continuations and structural plans are sequence-sensitive.
+- The continuation table is `Map<number, number>` keyed by `previousActionId * AI_MODEL_ACTION_COUNT + currentActionId`. This encodes the (previous, current) action pair as a single integer, avoiding string concatenation on every hot-path lookup.
 
 ### 2.6 Static Action Scoring
 
@@ -1510,6 +1513,7 @@ Implementation notes:
 
 - Friendly transfers are encoded all-to-all because they are not direction-local.
 - Runtime and training must share this exact contract or the model becomes meaningless.
+- The same numeric indices produced by `encodeActionIndex` are used directly as keys in the search engine's history and continuation heuristic tables (via `actionId` in `search/shared.ts`). The model action space therefore doubles as the search engine's action identity space, eliminating all string serialization in the search inner loop.
 
 ### 6.3 In-Browser ONNX Inference
 
@@ -1549,6 +1553,7 @@ Implementation notes:
 
 - If the asset is missing or invalid, the function quietly returns `null`.
 - Runtime currently uses `valueEstimate` for diagnostics, not for leaf evaluation.
+- `buildMaskedActionPriors` returns a `Float32Array` of size `AI_MODEL_ACTION_COUNT` rather than a string-keyed record. Each element is the softmax-normalized prior for that action index. This lets the search engine look up policy priors with `policyPriors[actionId]` — an O(1) array index — instead of a hash-table lookup on a generated string key.
 
 ## 7. Domain Engine Algorithms
 

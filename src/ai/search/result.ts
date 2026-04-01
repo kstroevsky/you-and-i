@@ -11,7 +11,7 @@ import type { AiBehaviorProfileId } from '@/shared/types/session';
 import { getBehaviorActionBias, getBehaviorGeometryBias } from '@/ai/behavior';
 import { getRiskCandidateAdjustment, hasCertifiedRiskProgress } from '@/ai/risk';
 import { toRootCandidate } from '@/ai/search/heuristics';
-import { actionKey, makeTableKey } from '@/ai/search/shared';
+import { actionId, makeTableKey } from '@/ai/search/shared';
 import type { RootRankedAction, SearchContext } from '@/ai/search/types';
 
 /** Creates the empty diagnostics payload used for all search results. */
@@ -88,7 +88,7 @@ export function sortRankedActions(ranked: RootRankedAction[]): RootRankedAction[
       return right.score - left.score;
     }
 
-    return actionKey(left.action).localeCompare(actionKey(right.action));
+    return actionId(left.action) - actionId(right.action);
   });
 
   return ranked;

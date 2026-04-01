@@ -28,7 +28,8 @@ import {
   getActionStrategicProfileFromAnalysis,
   getNoveltyPenalty,
 } from '@/ai/strategy';
-import { actionKey, throwIfTimedOut } from '@/ai/search/shared';
+import { AI_MODEL_ACTION_COUNT, encodeActionIndex } from '@/ai/model/actionSpace';
+import { throwIfTimedOut } from '@/ai/search/shared';
 import { getCellHeight, getTopChecker } from '@/domain/model/board';
 import { FRONT_HOME_ROW, HOME_ROWS } from '@/domain/model/constants';
 import { getAdjacentCoord, getJumpDirection, parseCoord } from '@/domain/model/coordinates';
@@ -44,6 +45,8 @@ import type { AiBehaviorProfile } from '@/shared/types/session';
 
 export type OrderedAction = {
   action: TurnAction;
+  /** Numeric ID in the AI model action space (0..AI_MODEL_ACTION_COUNT-1), or -1 if unrepresentable. */
+  actionId: number;
   drawTrapRisk: number;
   emptyCellsDelta: number;
   intent: AiStrategicIntent;
@@ -65,7 +68,6 @@ export type OrderedAction = {
   repeatsSourceFamily: boolean;
   repeatsSourceRegion: boolean;
   score: number;
-  serializedAction: string;
   sixStackDelta: number;
   sourceFamily: string;
   sourceRegion: SourceRegion;
@@ -81,26 +83,31 @@ export type PrecomputedOrderedAction = Omit<OrderedAction, 'score'> & {
 export type OrderMovesOptions = {
   actions?: TurnAction[];
   behaviorProfile?: AiBehaviorProfile | null;
+  /** Keyed by (previousActionId * AI_MODEL_ACTION_COUNT + actionId). */
+  continuationScores?: Map<number, number>;
   deadline?: number;
   diagnostics?: AiSearchDiagnostics | null;
   grandparentPositionKey?: string | null;
-  historyScores?: Map<string, number>;
+  historyScores?: Map<number, number>;
   includeAllQuietMoves?: boolean;
-  killerMoves?: TurnAction[];
+  /** Numeric action IDs of killer moves at this depth. */
+  killerIds?: number[];
   now?: () => number;
   participationState?: ParticipationState | null;
   perfCache?: SearchPerfCache | null;
-  policyPriors?: Record<string, number> | null;
+  policyPriors?: Float32Array | null;
   previousStrategicTags?: AiStrategicTag[] | null;
-  previousActionKey?: string | null;
+  /** Numeric ID of the previous action by the same player (for continuation heuristic). */
+  previousActionId?: number | null;
   policyPriorWeight?: number;
-  pvMove?: TurnAction | null;
+  /** Numeric ID of the PV move at this depth (for PV ordering). */
+  pvMoveId?: number | null;
   repetitionPenalty?: number;
   riskMode?: AiRiskMode;
   samePlayerPreviousAction?: TurnAction | null;
   selfUndoPenalty?: number;
-  continuationScores?: Map<string, number>;
-  ttMove?: TurnAction | null;
+  /** Numeric ID of the transposition-table best move (for TT ordering). */
+  ttMoveId?: number | null;
 };
 
 /**
@@ -114,15 +121,6 @@ function throwIfMoveOrderingTimedOut(deadline?: number, now?: () => number): voi
   }
 
   throwIfTimedOut(now, deadline);
-}
-
-/** Matches previously preferred moves against freshly generated legal actions. */
-function isSameAction(left: TurnAction | null | undefined, right: TurnAction): boolean {
-  if (!left) {
-    return false;
-  }
-
-  return actionKey(left) === actionKey(right);
 }
 
 /** Repetition pressure is evaluated on the post-move state so drawish lines sink in ordering. */
@@ -290,32 +288,33 @@ function clampScore(value: number, limit: number): number {
 
 /** Extracts the dynamic heuristic terms that evolve while the search runs. */
 function getDynamicScore(
-  entry: Pick<PrecomputedOrderedAction, 'action' | 'serializedAction'>,
+  entry: Pick<PrecomputedOrderedAction, 'actionId'>,
   {
     continuationScores,
     historyScores,
-    killerMoves = [],
-    previousActionKey = null,
-    pvMove,
-    ttMove,
+    killerIds = [],
+    previousActionId = null,
+    pvMoveId,
+    ttMoveId,
   }: Pick<
     OrderMovesOptions,
-    'continuationScores' | 'historyScores' | 'killerMoves' | 'previousActionKey' | 'pvMove' | 'ttMove'
+    'continuationScores' | 'historyScores' | 'killerIds' | 'previousActionId' | 'pvMoveId' | 'ttMoveId'
   >,
 ): number {
-  const historyScore = historyScores?.get(entry.serializedAction) ?? 0;
+  const id = entry.actionId;
+  const historyScore = id >= 0 ? (historyScores?.get(id) ?? 0) : 0;
   const continuationScore =
-    previousActionKey === null
+    previousActionId === null || id < 0
       ? 0
-      : continuationScores?.get(`${previousActionKey}->${entry.serializedAction}`) ?? 0;
-  const killerScore = killerMoves.some((killer) => isSameAction(killer, entry.action)) ? 9_000 : 0;
+      : (continuationScores?.get(previousActionId * AI_MODEL_ACTION_COUNT + id) ?? 0);
+  const killerScore = id >= 0 && killerIds.includes(id) ? 9_000 : 0;
   let score = 0;
 
-  if (isSameAction(ttMove, entry.action)) {
+  if (id >= 0 && ttMoveId === id) {
     score += 200_000;
   }
 
-  if (isSameAction(pvMove, entry.action)) {
+  if (id >= 0 && pvMoveId === id) {
     score += 150_000;
   }
 
@@ -450,8 +449,8 @@ export function precomputeOrderedActions(
         preset,
         riskMode,
       }) - baseStructureScore;
-    const serializedAction = actionKey(action);
-    const policyPrior = policyPriors?.[serializedAction] ?? 0;
+    const currentActionId = encodeActionIndex(action) ?? -1;
+    const policyPrior = policyPriors && currentActionId >= 0 ? (policyPriors[currentActionId] ?? 0) : 0;
     const isRepetition = repeatedPositionCount > 1;
     const isSelfUndo =
       (grandparentPositionKey !== null && nextPositionKey === grandparentPositionKey) ||
@@ -580,6 +579,7 @@ export function precomputeOrderedActions(
 
     return {
       action,
+      actionId: currentActionId,
       drawTrapRisk: tiebreakProfile.drawTrapRisk,
       emptyCellsDelta,
       intent: strategicProfile.intent,
@@ -602,7 +602,6 @@ export function precomputeOrderedActions(
       repeatsSourceRegion: participationProfile.repeatsSourceRegion,
       sourceFamily: participationProfile.sourceFamily,
       sourceRegion: participationProfile.sourceRegion,
-      serializedAction,
       sixStackDelta,
       staticScore,
       tags: strategicProfile.tags,
@@ -621,22 +620,22 @@ export function orderPrecomputedMoves(
     deadline,
     historyScores,
     includeAllQuietMoves = false,
-    killerMoves = [],
+    killerIds = [],
     now,
-    previousActionKey = null,
-    pvMove,
-    ttMove,
+    previousActionId = null,
+    pvMoveId,
+    ttMoveId,
   }: Pick<
     OrderMovesOptions,
     | 'continuationScores'
     | 'deadline'
     | 'historyScores'
     | 'includeAllQuietMoves'
-    | 'killerMoves'
+    | 'killerIds'
     | 'now'
-    | 'previousActionKey'
-    | 'pvMove'
-    | 'ttMove'
+    | 'previousActionId'
+    | 'pvMoveId'
+    | 'ttMoveId'
   > = {},
 ): OrderedAction[] {
   const ordered = precomputedActions.map<OrderedAction>((entry) => {
@@ -649,10 +648,10 @@ export function orderPrecomputedMoves(
         getDynamicScore(entry, {
           continuationScores,
           historyScores,
-          killerMoves,
-          previousActionKey,
-          pvMove,
-          ttMove,
+          killerIds,
+          previousActionId,
+          pvMoveId,
+          ttMoveId,
         }),
     };
   });

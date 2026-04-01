@@ -34,7 +34,7 @@ import {
   selectCandidateAction,
   sortRankedActions,
 } from '@/ai/search/result';
-import { actionKey, isSearchTimeout, makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
+import { actionId, isSearchTimeout, makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
 import type { RootRankedAction, SearchContext, TranspositionEntry } from '@/ai/search/types';
 
 /**
@@ -281,17 +281,17 @@ export function chooseComputerAction({
 
   const context: SearchContext = {
     behaviorProfile,
-    continuationScores: new Map<string, number>(),
+    continuationScores: new Map<number, number>(),
     deadline,
     diagnostics,
     evaluatedNodes: 0,
-    historyScores: new Map<string, number>(),
-    killerMovesByDepth: new Map<number, TurnAction[]>(),
+    historyScores: new Map<number, number>(),
+    killerMovesByDepth: new Map<number, number[]>(),
     now,
     perfCache,
     policyPriors,
     preset,
-    pvMoveByDepth: new Map<number, TurnAction>(),
+    pvMoveByDepth: new Map<number, number>(),
     riskMode: effectiveRiskMode,
     rootParticipationState,
     rootPlayer: state.currentPlayer,
@@ -308,27 +308,27 @@ export function chooseComputerAction({
    * Root ordering is rebuilt at each depth because heuristic tables, TT moves, and
    * PV hints evolve as the search learns more about the position.
    */
-  const buildRootOrdering = (pvMove: TurnAction | null): OrderedAction[] =>
+  const buildRootOrdering = (pvMoveId: number | null): OrderedAction[] =>
     orderPrecomputedMoves(getRootPrecomputed(), preset, {
       deadline,
       historyScores: context.historyScores,
       includeAllQuietMoves: true,
-      killerMoves: context.killerMovesByDepth.get(0) ?? [],
+      killerIds: context.killerMovesByDepth.get(0) ?? [],
       now,
-      previousActionKey: null,
-      pvMove,
+      previousActionId: null,
+      pvMoveId,
       continuationScores: context.continuationScores,
-      ttMove: context.table.get(rootPositionKey)?.bestAction ?? null,
+      ttMoveId: (() => { const a = context.table.get(rootPositionKey)?.bestAction ?? null; return a ? actionId(a) : null; })(),
     });
   /** Timeout fallback ordering avoids the deadline check so it can always produce a legal answer. */
   const buildOrderedFallback = (): OrderedAction[] =>
     orderPrecomputedMoves(getFallbackRootPrecomputed(), preset, {
       historyScores: context.historyScores,
       includeAllQuietMoves: true,
-      killerMoves: context.killerMovesByDepth.get(0) ?? [],
-      previousActionKey: null,
+      killerIds: context.killerMovesByDepth.get(0) ?? [],
+      previousActionId: null,
       continuationScores: context.continuationScores,
-      ttMove: context.table.get(rootPositionKey)?.bestAction ?? null,
+      ttMoveId: (() => { const a = context.table.get(rootPositionKey)?.bestAction ?? null; return a ? actionId(a) : null; })(),
     });
 
   let completedDepth = 0;
@@ -447,7 +447,7 @@ export function chooseComputerAction({
                   action: legalActions[0],
                   movedMass: 0,
                   participationDelta: 0,
-                  policyPrior: policyPriors?.[actionKey(legalActions[0])] ?? 0,
+                  policyPrior: policyPriors ? (policyPriors[actionId(legalActions[0])] ?? 0) : 0,
                   sourceFamily: 'none',
                 },
                 orderedFallbackScore,
@@ -496,7 +496,7 @@ export function chooseComputerAction({
                 positionKey: entry.nextPositionKey,
               },
             ],
-            entry.serializedAction,
+            entry.actionId,
             entry.nextParticipationState,
             context,
           )
@@ -513,7 +513,7 @@ export function chooseComputerAction({
                 positionKey: entry.nextPositionKey,
               },
             ],
-            entry.serializedAction,
+            entry.actionId,
             entry.nextParticipationState,
             context,
           );
@@ -613,7 +613,7 @@ export function chooseComputerAction({
                     mobilityDelta: 0,
                     movedMass: 0,
                     participationDelta: 0,
-                    policyPrior: policyPriors?.[actionKey(legalActions[0])] ?? 0,
+                    policyPrior: policyPriors ? (policyPriors[actionId(legalActions[0])] ?? 0) : 0,
                     repeatedPositionCount: 1,
                     sixStackDelta: 0,
                     sourceFamily: 'none',
@@ -660,7 +660,7 @@ export function chooseComputerAction({
     }).action;
     fallbackKind = 'none';
 
-    context.pvMoveByDepth.set(0, bestAction);
+    context.pvMoveByDepth.set(0, actionId(bestAction));
   }
 
   return {

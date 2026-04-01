@@ -1,4 +1,3 @@
-import { actionKey } from '@/ai/search/shared';
 import { DIRECTION_VECTORS } from '@/domain/model/constants';
 import {
   allCoords,
@@ -29,9 +28,22 @@ const FRIENDLY_TRANSFER_OFFSET = ADJACENT_OFFSET + ADJACENT_ACTION_COUNT;
 
 const COORDS = allCoords();
 
+/** O(1) coordinate-to-index lookup precomputed at module load. */
+const COORD_INDEX: Map<Coord, number> = new Map(COORDS.map((c, i) => [c, i]));
+
+/** O(1) direction-to-index lookup keyed by `(fileDelta + 1) * 3 + (rankDelta + 1)`. Values are -1/0/+1. */
+const DIRECTION_INDEX: Map<number, number> = new Map(
+  DIRECTION_VECTORS.map((d, i) => [(d.fileDelta + 1) * 3 + (d.rankDelta + 1), i]),
+);
+
+/** O(1) adjacent-action-kind index precomputed at module load. */
+const ADJACENT_KIND_INDEX: Map<string, number> = new Map(
+  ADJACENT_ACTION_KINDS.map((k, i) => [k, i]),
+);
+
 /** Maps a board coordinate into the fixed action-head ordering shared by training and runtime. */
 function coordIndex(coord: Coord): number {
-  return COORDS.indexOf(coord);
+  return COORD_INDEX.get(coord) ?? -1;
 }
 
 /** Converts geometric direction into the compact directional basis used by the model head. */
@@ -40,29 +52,31 @@ function directionIndex(direction: DirectionVector | null): number {
     return -1;
   }
 
-  return DIRECTION_VECTORS.findIndex(
-    (candidate) =>
-      candidate.fileDelta === direction.fileDelta && candidate.rankDelta === direction.rankDelta,
-  );
+  return DIRECTION_INDEX.get((direction.fileDelta + 1) * 3 + (direction.rankDelta + 1)) ?? -1;
 }
 
 /** Adjacent moves share the same geometry lattice and differ only by semantic action kind. */
 function adjacentKindIndex(action: TurnAction): number {
-  return ADJACENT_ACTION_KINDS.indexOf(action.type as (typeof ADJACENT_ACTION_KINDS)[number]);
+  return ADJACENT_KIND_INDEX.get(action.type) ?? -1;
 }
 
 /**
  * Friendly transfers use an all-to-all source/target encoding because they are not
  * direction-local moves like adjacent steps and jumps.
+ *
+ * Target rank in the "all coords except source" list is:
+ *   rawTargetRank              if rawTargetRank < sourceRank
+ *   rawTargetRank - 1          if rawTargetRank > sourceRank
  */
 function encodeFriendlyTransferIndex(source: Coord, target: Coord): number {
   const sourceRank = coordIndex(source);
-  const targets = COORDS.filter((coord) => coord !== source);
-  const targetRank = targets.indexOf(target);
+  const rawTargetRank = coordIndex(target);
 
-  if (sourceRank < 0 || targetRank < 0) {
+  if (sourceRank < 0 || rawTargetRank < 0 || sourceRank === rawTargetRank) {
     return -1;
   }
+
+  const targetRank = rawTargetRank > sourceRank ? rawTargetRank - 1 : rawTargetRank;
 
   return FRIENDLY_TRANSFER_OFFSET + sourceRank * 35 + targetRank;
 }
@@ -118,12 +132,17 @@ export function encodeActionIndex(action: TurnAction): number | null {
 /**
  * Masks raw model logits down to legal actions and turns them into normalized priors.
  *
+ * Returns a Float32Array of size AI_MODEL_ACTION_COUNT where each element is the
+ * softmax-normalized prior for that action index. Unrepresentable or illegal actions
+ * have a prior of 0. Callers index this array using encodeActionIndex.
+ *
  * The model never decides legality; it only reweights already legal actions.
  */
 export function buildMaskedActionPriors(
   legalActions: TurnAction[],
   logits: ArrayLike<number>,
-): Record<string, number> {
+): Float32Array {
+  const result = new Float32Array(AI_MODEL_ACTION_COUNT);
   const indexed = legalActions
     .map((action) => {
       const index = encodeActionIndex(action);
@@ -132,28 +151,26 @@ export function buildMaskedActionPriors(
         return null;
       }
 
-      return {
-        action,
-        logit: logits[index] / AI_MODEL_POLICY_TEMPERATURE,
-      };
+      return { index, logit: logits[index] / AI_MODEL_POLICY_TEMPERATURE };
     })
-    .filter(Boolean) as Array<{ action: TurnAction; logit: number }>;
+    .filter(Boolean) as Array<{ index: number; logit: number }>;
 
   if (!indexed.length) {
-    return {};
+    return result;
   }
 
   const maxLogit = Math.max(...indexed.map((entry) => entry.logit));
   const weights = indexed.map((entry) => ({
-    key: actionKey(entry.action),
+    index: entry.index,
     weight: Math.exp(entry.logit - maxLogit),
   }));
   const totalWeight = weights.reduce((sum, entry) => sum + entry.weight, 0) || 1;
 
-  return weights.reduce<Record<string, number>>((priors, entry) => {
-    priors[entry.key] = entry.weight / totalWeight;
-    return priors;
-  }, {});
+  for (const entry of weights) {
+    result[entry.index] = entry.weight / totalWeight;
+  }
+
+  return result;
 }
 
 /** Exposes action-space metadata for tests, tooling, and model/documentation sanity checks. */

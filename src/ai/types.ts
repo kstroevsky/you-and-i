@@ -66,7 +66,7 @@ export type ChooseComputerActionRequest = {
 };
 
 export type AiModelGuidance = {
-  actionPriors: Record<string, number>;
+  actionPriors: Float32Array;
   source: 'none' | 'onnx';
   strategicIntent: AiStrategicIntent | null;
   valueEstimate: number | null;

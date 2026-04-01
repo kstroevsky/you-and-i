@@ -1,5 +1,6 @@
 import { evaluateState } from '@/ai/evaluation';
 import { orderMoves } from '@/ai/moveOrdering';
+import { actionId } from '@/ai/search/shared';
 import type { ParticipationState } from '@/ai/participation';
 import type { EngineState, TurnAction } from '@/domain';
 
@@ -23,7 +24,7 @@ export function negamax(
   beta: number,
   currentDepth: number,
   searchLine: SearchLineEntry[],
-  previousActionKey: string | null,
+  previousActionId: number | null,
   participationState: ParticipationState,
   context: SearchContext,
 ): number {
@@ -76,7 +77,7 @@ export function negamax(
       beta,
       currentDepth,
       searchLine,
-      previousActionKey,
+      previousActionId,
       participationState,
       context,
     );
@@ -91,15 +92,15 @@ export function negamax(
       context,
     ),
     historyScores: context.historyScores,
-    killerMoves: context.killerMovesByDepth.get(currentDepth) ?? [],
+    killerIds: context.killerMovesByDepth.get(currentDepth) ?? [],
     now: context.now,
     diagnostics: context.diagnostics,
     participationState,
     perfCache: context.perfCache,
     policyPriors: null,
     previousStrategicTags: currentDepth === 0 ? context.rootPreviousStrategicTags : null,
-    previousActionKey,
-    pvMove: context.pvMoveByDepth.get(currentDepth),
+    previousActionId,
+    pvMoveId: context.pvMoveByDepth.get(currentDepth) ?? null,
     repetitionPenalty: context.preset.repetitionPenalty,
     riskMode: context.riskMode,
     samePlayerPreviousAction: getPreviousOwnActionFromLine(
@@ -109,7 +110,7 @@ export function negamax(
     ),
     selfUndoPenalty: context.preset.selfUndoPenalty,
     continuationScores: context.continuationScores,
-    ttMove: cached?.bestAction,
+    ttMoveId: cached?.bestAction ? actionId(cached.bestAction) : null,
   });
 
   if (!orderedMoves.length) {
@@ -156,7 +157,7 @@ export function negamax(
             beta,
             currentDepth + 1,
             nextSearchLine,
-            entry.serializedAction,
+            entry.actionId,
             entry.nextParticipationState,
             context,
           )
@@ -167,7 +168,7 @@ export function negamax(
             -alpha,
             currentDepth + 1,
             nextSearchLine,
-            entry.serializedAction,
+            entry.actionId,
             entry.nextParticipationState,
             context,
           );
@@ -181,7 +182,7 @@ export function negamax(
             alpha + 1,
             currentDepth + 1,
             nextSearchLine,
-            entry.serializedAction,
+            entry.actionId,
             entry.nextParticipationState,
             context,
           )
@@ -192,7 +193,7 @@ export function negamax(
             -alpha,
             currentDepth + 1,
             nextSearchLine,
-            entry.serializedAction,
+            entry.actionId,
             entry.nextParticipationState,
             context,
           );
@@ -207,7 +208,7 @@ export function negamax(
               beta,
               currentDepth + 1,
               nextSearchLine,
-              entry.serializedAction,
+              entry.actionId,
               entry.nextParticipationState,
               context,
             )
@@ -218,7 +219,7 @@ export function negamax(
               -alpha,
               currentDepth + 1,
               nextSearchLine,
-              entry.serializedAction,
+              entry.actionId,
               entry.nextParticipationState,
               context,
             );
@@ -236,7 +237,7 @@ export function negamax(
 
     if (alpha >= beta) {
       context.diagnostics.betaCutoffs += 1;
-      rememberCutoffMove(entry, depth, currentDepth, previousActionKey, context);
+      rememberCutoffMove(entry, depth, currentDepth, previousActionId, context);
       break;
     }
   }
@@ -260,7 +261,7 @@ export function negamax(
   });
 
   if (bestAction) {
-    context.pvMoveByDepth.set(currentDepth, bestAction);
+    context.pvMoveByDepth.set(currentDepth, actionId(bestAction));
   }
 
   return bestScore;

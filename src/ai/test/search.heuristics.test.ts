@@ -14,7 +14,7 @@ import { withConfig } from '@/test/factories';
 function createSearchContext(): SearchContext {
   return {
     behaviorProfile: null,
-    continuationScores: new Map<string, number>(),
+    continuationScores: new Map<number, number>(),
     deadline: 0,
     diagnostics: {
       adverseDrawTrapPenalties: 0,
@@ -34,13 +34,13 @@ function createSearchContext(): SearchContext {
       transpositionHits: 0,
     },
     evaluatedNodes: 0,
-    historyScores: new Map<string, number>(),
-    killerMovesByDepth: new Map<number, TurnAction[]>(),
+    historyScores: new Map<number, number>(),
+    killerMovesByDepth: new Map<number, number[]>(),
     now: () => 0,
     perfCache: createSearchPerfCache(),
     policyPriors: null,
     preset: AI_DIFFICULTY_PRESETS.hard,
-    pvMoveByDepth: new Map<number, TurnAction>(),
+    pvMoveByDepth: new Map<number, number>(),
     riskMode: 'normal',
     rootParticipationState: {} as ParticipationState,
     rootPlayer: 'white',

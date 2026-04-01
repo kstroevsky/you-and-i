@@ -24,8 +24,8 @@ describe('search parity guardrails', () => {
       rootCandidates: [
         'climbOne:B2:A1',
         'manualUnfreeze:A4',
-        'manualUnfreeze:A5',
-        'manualUnfreeze:A6',
+        'manualUnfreeze:C4',
+        'manualUnfreeze:D4',
       ],
       state: createOpponentThreatState(),
     },

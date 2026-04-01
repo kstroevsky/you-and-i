@@ -227,7 +227,7 @@ describe('zobristHash — uniqueness', () => {
     const coords = allCoords();
     const baseChecker = { id: 'white-01', owner: 'white' as const, frozen: false };
     const hashes = coords.map((coord) => {
-      const board = { ...Object.fromEntries(coords.map((c) => [c, { checkers: [] }])) } as ReturnType<typeof createInitialBoard>;
+      const board = Object.fromEntries(coords.map((c) => [c, { checkers: [] }])) as unknown as ReturnType<typeof createInitialBoard>;
       board[coord] = { checkers: [{ ...baseChecker }] };
       return zobristHash(initialState({ board }));
     });

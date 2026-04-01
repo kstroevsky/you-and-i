@@ -6,12 +6,13 @@ import {
   orderPrecomputedMoves,
   precomputeOrderedActions,
 } from '@/ai/moveOrdering';
+import { AI_MODEL_ACTION_COUNT } from '@/ai/model/actionSpace';
 import {
   getRootPreviousOwnAction,
   getRootPreviousStrategicTags,
   getRootSelfUndoPositionKey,
 } from '@/ai/search/heuristics';
-import { actionKey } from '@/ai/search/shared';
+import { actionId, actionKey } from '@/ai/search/shared';
 import { buildParticipationState } from '@/ai/participation';
 import { applyAction, createInitialState, getLegalActions } from '@/domain';
 import { withConfig } from '@/test/factories';
@@ -32,43 +33,53 @@ describe('move ordering precomputation', () => {
     );
     const legalActions = getLegalActions(state, config);
     const rootPreviousOwnAction = getRootPreviousOwnAction(state);
-    const previousActionKey = rootPreviousOwnAction ? actionKey(rootPreviousOwnAction) : null;
-    const policyPriors = legalActions.length
-      ? {
-          [actionKey(legalActions[0])]: 0.7,
-          [actionKey(legalActions[1] ?? legalActions[0])]: 0.15,
-        }
+    const previousActionId = rootPreviousOwnAction ? actionId(rootPreviousOwnAction) : null;
+    const policyPriors: Float32Array | null = legalActions.length
+      ? (() => {
+          const arr = new Float32Array(AI_MODEL_ACTION_COUNT);
+          const id0 = actionId(legalActions[0]);
+          if (id0 >= 0) arr[id0] = 0.7;
+          const id1 = actionId(legalActions[1] ?? legalActions[0]);
+          if (id1 >= 0) arr[id1] = 0.15;
+          return arr;
+        })()
       : null;
-    const historyScores = new Map(
-      legalActions.slice(0, 3).map((action, index) => [actionKey(action), (index + 1) * 400]),
+    const historyScores = new Map<number, number>(
+      legalActions.slice(0, 3).map((action, index) => [actionId(action), (index + 1) * 400]),
     );
-    const continuationScores = previousActionKey
-      ? new Map(
-          legalActions
-            .slice(0, 2)
-            .map((action, index) => [`${previousActionKey}->${actionKey(action)}`, (index + 1) * 250]),
-        )
-      : new Map<string, number>();
-    const killerMoves = legalActions.length > 2 ? [legalActions[2]] : legalActions.slice(0, 1);
-    const pvMove = legalActions[1] ?? null;
-    const ttMove = legalActions[0] ?? null;
+    const continuationScores =
+      previousActionId !== null
+        ? new Map<number, number>(
+            legalActions
+              .slice(0, 2)
+              .map((action, index) => [
+                previousActionId * AI_MODEL_ACTION_COUNT + actionId(action),
+                (index + 1) * 250,
+              ]),
+          )
+        : new Map<number, number>();
+    const killerIds = legalActions.length > 2
+      ? [actionId(legalActions[2])]
+      : legalActions.slice(0, 1).map(actionId);
+    const pvMoveId = legalActions[1] != null ? actionId(legalActions[1]) : null;
+    const ttMoveId = legalActions[0] != null ? actionId(legalActions[0]) : null;
     const orderingOptions = {
       actions: legalActions,
       continuationScores,
       grandparentPositionKey: getRootSelfUndoPositionKey(state),
       historyScores,
       includeAllQuietMoves: true,
-      killerMoves,
+      killerIds,
       participationState: buildParticipationState(state, preset.participationWindow),
       policyPriors,
       policyPriorWeight: preset.policyPriorWeight,
-      previousActionKey,
+      previousActionId,
       previousStrategicTags: getRootPreviousStrategicTags(state),
-      pvMove,
+      pvMoveId,
       repetitionPenalty: preset.repetitionPenalty,
       samePlayerPreviousAction: rootPreviousOwnAction,
       selfUndoPenalty: preset.selfUndoPenalty,
-      ttMove,
+      ttMoveId,
     } as const;
 
     const direct = orderMoves(
@@ -90,6 +101,7 @@ describe('move ordering precomputation', () => {
     expect(
       rescored.map((entry) => ({
         action: actionKey(entry.action),
+        actionId: entry.actionId,
         isForced: entry.isForced,
         isRepetition: entry.isRepetition,
         isSelfUndo: entry.isSelfUndo,
@@ -98,13 +110,13 @@ describe('move ordering precomputation', () => {
         participationDelta: entry.participationDelta,
         policyPrior: entry.policyPrior,
         score: entry.score,
-        serializedAction: entry.serializedAction,
         sourceFamily: entry.sourceFamily,
         tags: entry.tags,
       })),
     ).toEqual(
       direct.map((entry) => ({
         action: actionKey(entry.action),
+        actionId: entry.actionId,
         isForced: entry.isForced,
         isRepetition: entry.isRepetition,
         isSelfUndo: entry.isSelfUndo,
@@ -113,7 +125,6 @@ describe('move ordering precomputation', () => {
         participationDelta: entry.participationDelta,
         policyPrior: entry.policyPrior,
         score: entry.score,
-        serializedAction: entry.serializedAction,
         sourceFamily: entry.sourceFamily,
         tags: entry.tags,
       })),

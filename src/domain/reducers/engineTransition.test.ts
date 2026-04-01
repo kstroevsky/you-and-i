@@ -13,7 +13,7 @@ describe('engine transition pipeline', () => {
     const state = gameStateWithBoard(
       boardWithPieces({
         A1: [checker('white')],
-        B2: [checker('white')],
+        B2: [checker('black')],
         D4: [checker('black')],
         F6: [checker('black')],
       }),

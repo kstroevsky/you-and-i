@@ -81,9 +81,15 @@ export function assertPendingJump(value: unknown): PendingJump | null {
       )
     : [];
 
+  const firstJumpedOwner: Player | undefined =
+    value.firstJumpedOwner === 'white' || value.firstJumpedOwner === 'black'
+      ? value.firstJumpedOwner
+      : undefined;
+
   return {
     source: assertCoord(value.source, 'pendingJump.source'),
     jumpedCheckerIds,
+    ...(firstJumpedOwner !== undefined ? { firstJumpedOwner } : {}),
     ...(visitedCoords.length ? { visitedCoords } : {}),
     ...(visitedStateKeys.length ? { visitedStateKeys } : {}),
   };

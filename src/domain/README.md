@@ -256,7 +256,8 @@ Jump continuation is one of the most subtle rules in the project, so the engine 
 2. only a single checker may occupy the jumped coordinate;
 3. the landing coordinate two steps away must be empty;
 4. the jumped checker's `id` must not already be present in the continuation trail;
-5. if the jump is legal, that checker id is appended to `pendingJump.jumpedCheckerIds`.
+5. the jumped checker's owner must match `pendingJump.firstJumpedOwner` — the owner of the first checker jumped in this chain;
+6. if the jump is legal, that checker id is appended to `pendingJump.jumpedCheckerIds` and `firstJumpedOwner` is set from the first jump if not already known.
 
 That design allows a chain to revisit a landing square, including the starting square, if it does so by jumping different physical checkers. The engine therefore blocks repeated jumped identities, not repeated landing coordinates.
 
@@ -290,7 +291,8 @@ When a jump leaves further jump targets from the landing coordinate, the engine 
 ```text
 pendingJump = {
   source: currentCoord,
-  jumpedCheckerIds: [...]
+  jumpedCheckerIds: [...],
+  firstJumpedOwner: 'white' | 'black'
 }
 ```
 
@@ -299,7 +301,7 @@ The turn does not switch. On the continued turn, the acting coordinate is constr
 ```mermaid
 flowchart TD
   A["Jump segment resolves"] --> B{"Further legal jump targets from landing cell?"}
-  B -- "Yes" --> C["Write pendingJump { source, jumpedCheckerIds }"]
+  B -- "Yes" --> C["Write pendingJump { source, jumpedCheckerIds, firstJumpedOwner }"]
   C --> D["Current player keeps the turn"]
   D --> E["Only that source coordinate may continue acting"]
   E --> F["Player may continue with any legal follow-up from that source"]
@@ -307,13 +309,18 @@ flowchart TD
   G --> H["Turn passes to the opponent"]
 ```
 
-### Loop prevention
+### Loop prevention and color consistency
 
 The canonical loop-prevention rule is identity-based:
 
 - a jump chain may not jump over the same physical checker twice.
 
-`resolveJumpPath()` enforces this through the `jumpedCheckerIds` set. This is the current operational rule used by move generation and application.
+Additionally, a jump chain must stay color-consistent:
+
+- the first checker jumped in a chain sets `pendingJump.firstJumpedOwner`;
+- every subsequent jump in that chain must cross a checker owned by the same player.
+
+`resolveJumpPath()` enforces both rules: the `jumpedCheckerIds` set blocks re-jumping the same checker, and `firstJumpedOwner` blocks switching to a checker of the opposite color mid-chain.
 
 Legacy session payloads may still contain `visitedCoords` or `visitedStateKeys`, and the compatibility helpers in [`pendingJump.ts`](./model/pendingJump.ts) and [`jump.ts`](./rules/moveGeneration/jump.ts) can reconstruct equivalent identity trails from them. Those fields exist for backwards compatibility, not as the primary runtime representation.
 

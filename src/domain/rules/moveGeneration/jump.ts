@@ -188,27 +188,37 @@ function applySingleJumpSegment(
   return validateBoard(board);
 }
 
-/** Resolves an entire jump path and blocks jumping the same checker twice. */
+/** Resolves an entire jump path, blocks jumping the same checker twice, and enforces color consistency. */
 export function resolveJumpPath(
   board: Board,
   source: Coord,
   path: Coord[],
   movingPlayer: Player,
   jumpedSeed?: Set<string>,
+  firstJumpedOwnerSeed?: Player | null,
 ): ValidationResult | PartialJumpResolution {
   const nextBoard = cloneBoardStructure(board);
   const clonedCoords = new Set<Coord>();
   let currentCoord = source;
   const jumpedCheckerIds = new Set(jumpedSeed ?? []);
+  let firstJumpedOwner: Player | null = firstJumpedOwnerSeed ?? null;
 
   for (const landing of path) {
     const middleCoord = getJumpMiddleCoord(currentCoord, landing);
-    const jumpedCheckerId = middleCoord ? getTopChecker(nextBoard, middleCoord)?.id ?? null : null;
+    const jumpedChecker = middleCoord ? getTopChecker(nextBoard, middleCoord) ?? null : null;
+    const jumpedCheckerId = jumpedChecker?.id ?? null;
 
     if (jumpedCheckerId && jumpedCheckerIds.has(jumpedCheckerId)) {
       return {
         valid: false,
         reason: `Jump path cannot jump over ${middleCoord} twice during the same jump chain.`,
+      };
+    }
+
+    if (jumpedChecker !== null && firstJumpedOwner !== null && jumpedChecker.owner !== firstJumpedOwner) {
+      return {
+        valid: false,
+        reason: `Jump continuation must stay consistent: only ${firstJumpedOwner} checkers may be jumped in this chain.`,
       };
     }
 
@@ -231,6 +241,10 @@ export function resolveJumpPath(
       };
     }
 
+    if (firstJumpedOwner === null) {
+      firstJumpedOwner = jumpedChecker!.owner;
+    }
+
     currentCoord = landing;
     jumpedCheckerIds.add(jumpedCheckerId);
   }
@@ -239,6 +253,7 @@ export function resolveJumpPath(
     board: nextBoard,
     currentCoord,
     jumpedCheckerIds,
+    firstJumpedOwner,
   };
 }
 
@@ -266,6 +281,20 @@ function getJumpTargetsOnBoard(board: Board, source: Coord, _movingPlayer: Playe
   }
 
   return targets;
+}
+
+/** Returns the first-jumped checker owner from the engine state's pending jump. */
+export function getVisitedFirstJumpedOwner(
+  state: Pick<EngineState, 'board' | 'pendingJump'>,
+  source: Coord,
+): Player | null {
+  const pendingJump = state.pendingJump;
+
+  if (pendingJump?.source === source && pendingJump.firstJumpedOwner) {
+    return pendingJump.firstJumpedOwner;
+  }
+
+  return null;
 }
 
 /** Returns jumped-checker ids carried by the engine state or reconstructed from history. */
@@ -310,13 +339,19 @@ export function getJumpTargetsForContext(
   source: Coord,
   movingPlayer: Player,
   jumpedCheckerIds: Set<string>,
+  firstJumpedOwner: Player | null,
 ): Coord[] {
   const targets: Coord[] = [];
 
   for (const target of getJumpTargetsOnBoard(board, source, movingPlayer)) {
-    const jumpedCheckerId = getJumpedCheckerId(board, source, target);
+    const middleCoord = getJumpMiddleCoord(source, target);
+    const jumpedChecker = middleCoord ? getTopChecker(board, middleCoord) ?? null : null;
 
-    if (!jumpedCheckerId || jumpedCheckerIds.has(jumpedCheckerId)) {
+    if (!jumpedChecker || jumpedCheckerIds.has(jumpedChecker.id)) {
+      continue;
+    }
+
+    if (firstJumpedOwner !== null && jumpedChecker.owner !== firstJumpedOwner) {
       continue;
     }
 
@@ -342,6 +377,7 @@ export function getJumpContinuationTargets(
   let currentCoord = source;
   let currentBoard = state.board;
   let jumpedCheckerIds = getVisitedJumpedCheckerIds(state, source);
+  let firstJumpedOwner = getVisitedFirstJumpedOwner(state, source);
 
   for (const landing of draftPath) {
     const partial = resolveJumpPath(
@@ -350,6 +386,7 @@ export function getJumpContinuationTargets(
       [landing],
       movingPlayer,
       jumpedCheckerIds,
+      firstJumpedOwner,
     );
 
     if (!('board' in partial)) {
@@ -359,7 +396,8 @@ export function getJumpContinuationTargets(
     currentBoard = partial.board;
     currentCoord = partial.currentCoord;
     jumpedCheckerIds = partial.jumpedCheckerIds;
+    firstJumpedOwner = partial.firstJumpedOwner;
   }
 
-  return getJumpTargetsForContext(currentBoard, currentCoord, movingPlayer, jumpedCheckerIds);
+  return getJumpTargetsForContext(currentBoard, currentCoord, movingPlayer, jumpedCheckerIds, firstJumpedOwner);
 }

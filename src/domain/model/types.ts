@@ -27,6 +27,7 @@ export type RuleConfig = {
 export type PendingJump = {
   source: Coord;
   jumpedCheckerIds: string[];
+  firstJumpedOwner?: Player;
   visitedCoords?: Coord[];
   visitedStateKeys?: string[];
 };

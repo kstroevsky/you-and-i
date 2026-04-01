@@ -187,7 +187,7 @@ describe('game engine moves', () => {
     const state = gameStateWithBoard(
       boardWithPieces({
         A1: [checker('white')],
-        B2: [checker('white')],
+        B2: [checker('black')],
         C4: [checker('black')],
         D4: [checker('black')],
         F6: [checker('black')],

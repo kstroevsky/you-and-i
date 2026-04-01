@@ -1,9 +1,10 @@
-import type { ActionKind, Board, Coord, PendingJump } from '@/domain/model/types';
+import type { ActionKind, Board, Coord, PendingJump, Player } from '@/domain/model/types';
 
 export type PartialJumpResolution = {
   board: Board;
   currentCoord: Coord;
   jumpedCheckerIds: Set<string>;
+  firstJumpedOwner: Player | null;
 };
 
 export type AppliedActionState = {

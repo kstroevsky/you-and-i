@@ -252,6 +252,8 @@ For every segment:
 
 If several opponent singles are jumped across consecutive segments or across several continued jump turns, each jumped opponent single becomes frozen separately.
 
+A jump chain is also **color-consistent**: the first segment fixes which color of checker may be jumped for the rest of that chain. If the first jump crossed a White checker, every later segment in the same chain must also cross a White checker. If it crossed a Black checker, every later segment must also cross a Black checker.
+
 ---
 
 ## 13. Frozen checker rules

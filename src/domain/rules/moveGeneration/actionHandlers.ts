@@ -33,6 +33,7 @@ import {
   getJumpContinuationTargets,
   getJumpTargetsForContext,
   getMovingPlayer,
+  getVisitedFirstJumpedOwner,
   getVisitedJumpedCheckerIds,
   resolveJumpPath,
 } from '@/domain/rules/moveGeneration/jump';
@@ -187,6 +188,7 @@ const actionHandlers = {
         action.path,
         movingPlayer,
         getVisitedJumpedCheckerIds(state, action.source),
+        getVisitedFirstJumpedOwner(state, action.source),
       );
 
       if (!('board' in result)) {
@@ -198,6 +200,7 @@ const actionHandlers = {
         result.currentCoord,
         movingPlayer,
         result.jumpedCheckerIds,
+        result.firstJumpedOwner,
       );
 
       return {
@@ -206,6 +209,7 @@ const actionHandlers = {
           ? {
               source: result.currentCoord,
               jumpedCheckerIds: [...result.jumpedCheckerIds],
+              firstJumpedOwner: result.firstJumpedOwner ?? undefined,
             }
           : null,
         continuationTargets,

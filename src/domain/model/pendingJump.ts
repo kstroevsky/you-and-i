@@ -1,8 +1,8 @@
-import type { Coord, PendingJump } from '@/domain/model/types';
+import type { Coord, PendingJump, Player } from '@/domain/model/types';
 
 export type TurnContinuation =
   | { type: 'none' }
-  | { type: 'jump'; source: Coord; jumpedCheckerIds: string[] };
+  | { type: 'jump'; source: Coord; jumpedCheckerIds: string[]; firstJumpedOwner: Player };
 
 /** Returns the canonical tracking trail for runtime or legacy pending-jump payloads. */
 export function getPendingJumpTrail(pendingJump: PendingJump | null | undefined): string[] {
@@ -30,11 +30,13 @@ export function hasPendingJumpTrail(pendingJump: PendingJump | null | undefined)
 export function createJumpContinuation(
   source: Coord,
   jumpedCheckerIds: Iterable<string>,
+  firstJumpedOwner: Player,
 ): TurnContinuation {
   return {
     type: 'jump',
     source,
     jumpedCheckerIds: [...new Set(jumpedCheckerIds)],
+    firstJumpedOwner,
   };
 }
 
@@ -42,11 +44,11 @@ export function createJumpContinuation(
 export function normalizePendingJump(
   pendingJump: PendingJump | null | undefined,
 ): TurnContinuation {
-  if (!pendingJump) {
+  if (!pendingJump || !pendingJump.firstJumpedOwner) {
     return { type: 'none' };
   }
 
-  return createJumpContinuation(pendingJump.source, pendingJump.jumpedCheckerIds);
+  return createJumpContinuation(pendingJump.source, pendingJump.jumpedCheckerIds, pendingJump.firstJumpedOwner);
 }
 
 /** Projects the engine continuation model back to the persisted state shape. */
@@ -58,5 +60,6 @@ export function toPendingJump(continuation: TurnContinuation): PendingJump | nul
   return {
     source: continuation.source,
     jumpedCheckerIds: continuation.jumpedCheckerIds.slice(),
+    firstJumpedOwner: continuation.firstJumpedOwner,
   };
 }

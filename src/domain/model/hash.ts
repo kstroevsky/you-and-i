@@ -20,7 +20,7 @@ export function hashPosition(
   state: Pick<StateSnapshot, 'board' | 'currentPlayer'> & { pendingJump?: PendingJump | null },
 ): string {
   const pendingJumpKey = state.pendingJump
-    ? `${state.pendingJump.source}::${getPendingJumpTrail(state.pendingJump).join(',')}`
+    ? `${state.pendingJump.source}::${state.pendingJump.firstJumpedOwner ?? '?'}::${getPendingJumpTrail(state.pendingJump).join(',')}`
     : '-';
 
   return `${state.currentPlayer}::${pendingJumpKey}::${hashBoard(state.board)}`;

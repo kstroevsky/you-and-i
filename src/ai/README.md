@@ -382,7 +382,7 @@ The key safety rule is that risk never overrides tactical truth:
 
 - `actionKey()` for stable action serialization across ordering, tests, and caches;
 - `throwIfTimedOut()` and `isSearchTimeout()` for one timeout protocol across search phases;
-- `makeTableKey()` for transposition-table addressing via the domain's position hash.
+- `makeTableKey()` for transposition-table addressing via the 64-bit Zobrist hash (`zobristHash`).
 
 [`search/heuristics.ts`](./search/heuristics.ts) owns the supporting logic for:
 

@@ -204,8 +204,10 @@ That means stale replies are dropped for correctness and responsiveness. The poi
 
 `aiController.ts` also manages:
 
-- a per-request watchdog derived from the difficulty time budget plus buffers;
-- a larger first-request buffer for cold worker/model startup;
+- a per-request watchdog derived from the difficulty time budget plus `AI_WATCHDOG_BUFFER_MS`;
+- a larger first-request cold-start buffer (`AI_COLD_START_BUFFER_MS`) added when the worker has not yet responded to any request in the current session;
+- a slow-device buffer (`AI_SLOW_DEVICE_BUFFER_MS`) added when the previous search internally timed out or consumed more than 75 % of the time budget;
+- silent auto-retry on watchdog expiry: up to `AI_AUTO_RETRY_LIMIT` retries dispose the hung worker and restart the request invisibly before surfacing a user-visible error;
 - reveal pacing between chained AI jumps via `AI_MOVE_REVEAL_MS`;
 - worker disposal on error paths and on state transitions that invalidate the current request.
 

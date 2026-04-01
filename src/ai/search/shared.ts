@@ -1,4 +1,6 @@
-import { hashPosition, type EngineState, type TurnAction } from '@/domain';
+import type { EngineState, TurnAction } from '@/domain';
+
+import { zobristHash } from '@/ai/search/zobristHash';
 
 /** Shared timeout sentinel used across search and move ordering. */
 export const AI_SEARCH_TIMEOUT = 'AI_SEARCH_TIMEOUT';
@@ -29,5 +31,5 @@ export function throwIfTimedOut(now: () => number, deadline: number): void {
 
 /** Builds the transposition-table key for one engine state. */
 export function makeTableKey(state: EngineState): string {
-  return hashPosition(state);
+  return zobristHash(state);
 }

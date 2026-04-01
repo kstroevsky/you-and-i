@@ -70,6 +70,7 @@ The following algorithm families are explicitly covered in this document.
 | Neural guidance | In-browser ONNX inference | [`src/ai/model/guidance.ts`](../src/ai/model/guidance.ts) |
 | Domain engine | Recursive jump pathfinding | [`src/domain/rules/moveGeneration/jump.ts`](../src/domain/rules/moveGeneration/jump.ts) |
 | Domain engine | Deterministic position hashing | [`src/domain/model/hash.ts`](../src/domain/model/hash.ts) |
+| Search core | 64-bit Zobrist hashing | [`src/ai/search/zobristHash.ts`](../src/ai/search/zobristHash.ts) |
 | Domain engine | Draw tiebreak logic | [`src/domain/rules/victory.ts`](../src/domain/rules/victory.ts) |
 | Domain engine | Incremental state normalization | [`src/domain/serialization/session/normalization.ts`](../src/domain/serialization/session/normalization.ts) |
 | Domain engine | Coordinate vector delta math | [`src/domain/model/coordinates.ts`](../src/domain/model/coordinates.ts) |
@@ -1611,7 +1612,7 @@ File:
 [`src/domain/model/hash.ts`](../src/domain/model/hash.ts)
 
 Role in YOUI:
-Defines one canonical representation of a position for repetition detection, TT keys, and normalization.
+Produces a canonical string representation of a position for cross-session identity: threefold-repetition detection, `TurnRecord.positionHash`, and session normalization. **Not used for the AI transposition table** — see §7.2a below.
 
 Simplified pseudocode:
 
@@ -1631,13 +1632,93 @@ Step by step:
 2. Serialize checker ownership and frozen state at each coordinate.
 3. Prefix the side to move.
 4. Prefix the pending-jump continuation identity when present.
-5. Use that final string everywhere that the repo needs a canonical position key.
+5. Use that final string as the cross-session canonical position key.
 
 Implementation notes:
 
-- This is deterministic string serialization, not classical random-table Zobrist hashing.
-- The trade-off is exact identity versus speed: canonical strings avoid hash collisions between different states, but they are usually slower and allocate more than classic Zobrist-style XOR tables.
-- Architecturally it serves the same role as a lightweight position key, but the implementation is exact string hashing.
+- This is deterministic string serialization with zero collision risk: two different positions always produce different strings.
+- The trade-off is exactness over speed: string allocation on every call makes it unsuitable for the AI's inner search loop.
+- The output is stored in `TurnRecord.positionHash` and in `GameState.positionCounts`, giving it cross-session persistence obligations that rule out any hash format that might collide.
+
+### 7.2a 64-bit Zobrist Hashing
+
+File:
+[`src/ai/search/zobristHash.ts`](../src/ai/search/zobristHash.ts)
+
+Role in YOUI:
+Produces a compact 64-bit position key for the AI transposition table. Replaces `hashPosition` in that context only; never used for cross-session identity or rule purposes.
+
+Simplified pseudocode:
+
+```text
+// Precomputed at module load from two independent Splitmix32 streams:
+TABLE_H1[471], TABLE_H2[471]        // board / player / pending-jump source+owner
+CHECKER_H1[36], CHECKER_H2[36]      // one entry per checker id (white-01..black-18)
+LEGACY_COORD_H1[36], LEGACY_COORD_H2[36]  // one entry per coord (legacy trail path)
+
+function zobristHash(state):
+  h1 = h2 = 0
+
+  for each cell (36 total, in fixed coord order):
+    assert checkers.length <= 3        // guard: silent OOB would corrupt the hash
+    for each checker at stackPos:
+      cs = (owner == 'black' ? 2 : 0) | (frozen ? 1 : 0)
+      idx = cellIndex * 12 + stackPos * 4 + cs
+      h1 ^= TABLE_H1[idx]
+      h2 ^= TABLE_H2[idx]
+
+  if currentPlayer == 'black':
+    h1 ^= TABLE_H1[PLAYER_OFFSET]
+    h2 ^= TABLE_H2[PLAYER_OFFSET]
+
+  if pendingJump:
+    assert source in COORD_TO_IDX      // unknown coord is a logic error, not skipped
+    h1 ^= TABLE_H1[PENDING_SOURCE_OFFSET + sourceIndex]
+    h2 ^= TABLE_H2[PENDING_SOURCE_OFFSET + sourceIndex]
+    if firstJumpedOwner:
+      h1 ^= TABLE_H1[PENDING_OWNER_OFFSET + ownerBit]
+      h2 ^= TABLE_H2[PENDING_OWNER_OFFSET + ownerBit]
+
+    // Three trail formats in priority order (mirrors getPendingJumpTrail):
+    if jumpedCheckerIds.length:
+      for id in jumpedCheckerIds:
+        if id is standard 8-char format and index in [0,36):
+          h1 ^= CHECKER_H1[index]; h2 ^= CHECKER_H2[index]
+        else:
+          [ih1, ih2] = fnv1a_splitmix32_finalize(id)  // non-standard / test IDs
+          h1 ^= ih1; h2 ^= ih2
+    else if visitedCoords.length:          // legacy: coord strings
+      for coord in visitedCoords:
+        h1 ^= LEGACY_COORD_H1[coordIndex]; h2 ^= LEGACY_COORD_H2[coordIndex]
+    else if visitedStateKeys.length:       // oldest legacy: arbitrary strings
+      for key in visitedStateKeys:
+        [ih1, ih2] = fnv1a(key)
+        h1 ^= ih1; h2 ^= ih2
+
+  return h1.hex(8) + h2.hex(8)  // 16-char hex string
+```
+
+Step by step:
+
+1. At module load, fill three pairs of `Uint32Array` tables with sequential Splitmix32 output from two fixed seeds.
+2. Validate stack height (> 3 is a logic error); for each cell XOR in the value for position × stack depth × checker state.
+3. XOR in the side-to-move entry if black is to move.
+4. Assert the pending-jump source coord is known; XOR its table entry. XOR the `firstJumpedOwner` entry when present.
+5. Hash the jumped-checker trail using whichever format is present, in the same priority order as `getPendingJumpTrail()`:
+   - **Current format** (`jumpedCheckerIds`): standard 8-char IDs look up `CHECKER_H1/H2` by index; non-standard IDs (e.g. test-factory 3-digit IDs) derive a hash via FNV-1a seeded into two independent Splitmix32 finalization rounds.
+   - **Legacy format** (`visitedCoords`): coord strings look up `LEGACY_COORD_H1/H2` by coord index.
+   - **Oldest legacy** (`visitedStateKeys`): arbitrary strings use raw FNV-1a (unreachable in newly generated game states).
+6. Concatenate the two 32-bit halves as 8-char hex each → 16-char result.
+
+Implementation notes:
+
+- Three table pairs (board/player/pending, checker ids, legacy coords) keep every path in the Zobrist framework and off FNV-1a for reachable game states.
+- XOR accumulation over `jumpedCheckerIds` is order-independent by design: `getJumpTargetsForContext` checks set membership only, so states that reached the same jumped-checker set via different orderings are identical for TT purposes.
+- XOR degeneracy: two distinct checker-id sets can hash identically if their per-half XOR sums cancel. Per-half probability is ~630/2³² ≈ 1.5×10⁻⁷ (630 pairs from 36 checkers); the 64-bit joint probability is ~630²/2⁶⁴ ≈ 2×10⁻¹⁴ — negligible for a 50,000-entry table.
+- `firstJumpedOwner` encodes one bit (black vs white), not a specific checker. Two states that differ only in which exact checker was jumped first produce the same contribution from this field; the trail itself provides the differentiation.
+- All three Splitmix32 streams are consumed during initialization and not reused; the tables are stable and deterministic across runs.
+- This hash intentionally has no cross-session obligations. It lives only within a single search pass and is discarded when the worker terminates.
+- `hashPosition` continues to serve all game-rule purposes (threefold repetition, `TurnRecord.positionHash`, persistence). The two hashes are architecturally independent and their outputs are never compared against each other.
 
 ### 7.3 Draw Tiebreak Logic
 

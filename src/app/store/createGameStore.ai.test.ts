@@ -193,11 +193,16 @@ describe('createGameStore AI integration', () => {
 
     vi.advanceTimersByTime(EASY_WATCHDOG_MS + 1);
 
-    // Warm watchdog fired → silent auto-retry; still thinking, worker replaced.
+    // Warm watchdog fired → silent auto-retry #1; still thinking, worker replaced.
     expect(worker.terminated).toBe(true);
     expect(store.getState().aiStatus).toBe('thinking');
 
-    // Exhaust the auto-retry budget (cold-start + slow-device window).
+    // Second watchdog fires (cold-start + slow-device) → auto-retry #2.
+    vi.advanceTimersByTime(EASY_SLOW_RETRY_WATCHDOG_MS + 1);
+
+    expect(store.getState().aiStatus).toBe('thinking');
+
+    // Third watchdog exhausts the retry budget → error.
     vi.advanceTimersByTime(EASY_SLOW_RETRY_WATCHDOG_MS + 1);
 
     expect(store.getState().aiStatus).toBe('error');
@@ -506,23 +511,30 @@ describe('createGameStore AI integration', () => {
 
     vi.advanceTimersByTime(AI_COLD_START_BUFFER_MS);
 
-    // First watchdog fired → silent auto-retry; workers[1] created.
+    // First watchdog fired → silent auto-retry #1; workers[1] created.
     expect(workers[0]?.terminated).toBe(true);
     expect(workers).toHaveLength(2);
     expect(store.getState().aiStatus).toBe('thinking');
 
-    // Exhaust the single auto-retry (cold-start + slow-device window).
+    // Second watchdog (cold-start + slow-device) → silent auto-retry #2; workers[2] created.
     vi.advanceTimersByTime(EASY_SLOW_RETRY_WATCHDOG_MS + 1);
 
     expect(workers[1]?.terminated).toBe(true);
+    expect(workers).toHaveLength(3);
+    expect(store.getState().aiStatus).toBe('thinking');
+
+    // Third watchdog exhausts the retry budget → error.
+    vi.advanceTimersByTime(EASY_SLOW_RETRY_WATCHDOG_MS + 1);
+
+    expect(workers[2]?.terminated).toBe(true);
     expect(store.getState().aiStatus).toBe('error');
 
     // Manual retry after the error is still possible.
     store.getState().retryComputerMove();
 
     expect(store.getState().aiStatus).toBe('thinking');
-    expect(workers).toHaveLength(3);
-    expect(workers[2]?.requests).toHaveLength(1);
+    expect(workers).toHaveLength(4);
+    expect(workers[3]?.requests).toHaveLength(1);
   });
 
   it('ignores stale AI replies after restarting the worker', () => {

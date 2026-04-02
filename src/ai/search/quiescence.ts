@@ -157,36 +157,41 @@ export function quiescence(
   let bestScore = standPat;
 
   for (const entry of forcingMoves) {
-    const nextSearchLine = [
-      ...searchLine,
-      {
-        action: entry.action,
-        actor: state.currentPlayer,
-        positionKey: entry.nextPositionKey,
-      },
-    ];
     const keepsTurn = entry.nextState.currentPlayer === state.currentPlayer;
-    let score = keepsTurn
-      ? quiescence(
-          entry.nextState,
-          alpha,
-          beta,
-          currentDepth + 1,
-          nextSearchLine,
-          entry.actionId,
-          entry.nextParticipationState,
-          context,
-        )
-      : -quiescence(
-          entry.nextState,
-          -beta,
-          -alpha,
-          currentDepth + 1,
-          nextSearchLine,
-          entry.actionId,
-          entry.nextParticipationState,
-          context,
-        );
+
+    searchLine.push({
+      action: entry.action,
+      actor: state.currentPlayer,
+      positionKey: entry.nextPositionKey,
+    });
+
+    let score: number;
+
+    try {
+      score = keepsTurn
+        ? quiescence(
+            entry.nextState,
+            alpha,
+            beta,
+            currentDepth + 1,
+            searchLine,
+            entry.actionId,
+            entry.nextParticipationState,
+            context,
+          )
+        : -quiescence(
+            entry.nextState,
+            -beta,
+            -alpha,
+            currentDepth + 1,
+            searchLine,
+            entry.actionId,
+            entry.nextParticipationState,
+            context,
+          );
+    } finally {
+      searchLine.pop();
+    }
 
     score -= getMovePenalty(entry, context);
 

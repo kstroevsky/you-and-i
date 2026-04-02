@@ -36,7 +36,7 @@ import {
   sortRankedActions,
 } from '@/ai/search/result';
 import { actionId, isSearchTimeout, makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
-import type { RootRankedAction, SearchContext, TranspositionEntry } from '@/ai/search/types';
+import type { RootRankedAction, SearchContext, SearchLineEntry, TranspositionEntry } from '@/ai/search/types';
 
 /**
  * Builds a minimal ranked candidate when the search must fall back before it has
@@ -477,6 +477,7 @@ export function chooseComputerAction({
   ): RootRankedAction[] => {
     const ranked: RootRankedAction[] = [];
     const orderedMoves = buildRootOrdering(rootPvMoveId);
+    const searchLine: SearchLineEntry[] = [];
 
     context.diagnostics.policyPriorHits += countPolicyPriorHits(orderedMoves);
 
@@ -484,41 +485,43 @@ export function chooseComputerAction({
       throwIfTimedOut(now, deadline);
 
       const keepsTurn = entry.nextState.currentPlayer === state.currentPlayer;
-      let score = keepsTurn
-        ? negamax(
-            entry.nextState,
-            Math.max(0, depth - 1 + getSelectiveExtension(entry, depth, 0)),
-            alphaWindow,
-            betaWindow,
-            1,
-            [
-              {
-                action: entry.action,
-                actor: state.currentPlayer,
-                positionKey: entry.nextPositionKey,
-              },
-            ],
-            entry.actionId,
-            entry.nextParticipationState,
-            context,
-          )
-        : -negamax(
-            entry.nextState,
-            Math.max(0, depth - 1 + getSelectiveExtension(entry, depth, 0)),
-            -betaWindow,
-            -alphaWindow,
-            1,
-            [
-              {
-                action: entry.action,
-                actor: state.currentPlayer,
-                positionKey: entry.nextPositionKey,
-              },
-            ],
-            entry.actionId,
-            entry.nextParticipationState,
-            context,
-          );
+      const nextDepth = Math.max(0, depth - 1 + getSelectiveExtension(entry, depth, 0));
+
+      searchLine.push({
+        action: entry.action,
+        actor: state.currentPlayer,
+        positionKey: entry.nextPositionKey,
+      });
+
+      let score: number;
+
+      try {
+        score = keepsTurn
+          ? negamax(
+              entry.nextState,
+              nextDepth,
+              alphaWindow,
+              betaWindow,
+              1,
+              searchLine,
+              entry.actionId,
+              entry.nextParticipationState,
+              context,
+            )
+          : -negamax(
+              entry.nextState,
+              nextDepth,
+              -betaWindow,
+              -alphaWindow,
+              1,
+              searchLine,
+              entry.actionId,
+              entry.nextParticipationState,
+              context,
+            );
+      } finally {
+        searchLine.pop();
+      }
 
       score -= getMovePenalty(entry, context);
 

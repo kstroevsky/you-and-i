@@ -135,71 +135,19 @@ export function negamax(
   let searchedFirstChild = false;
 
   for (const entry of orderedMoves) {
-    const nextSearchLine = [
-      ...searchLine,
-      {
-        action: entry.action,
-        actor: state.currentPlayer,
-        positionKey: entry.nextPositionKey,
-      },
-    ];
     const keepsTurn = entry.nextState.currentPlayer === state.currentPlayer;
     const extension = getSelectiveExtension(entry, depth, currentDepth);
     const nextDepth = Math.max(0, depth - 1 + extension);
     let score: number;
 
-    if (!searchedFirstChild) {
-      score = keepsTurn
-        ? negamax(
-            entry.nextState,
-            nextDepth,
-            alpha,
-            beta,
-            currentDepth + 1,
-            nextSearchLine,
-            entry.actionId,
-            entry.nextParticipationState,
-            context,
-          )
-        : -negamax(
-            entry.nextState,
-            nextDepth,
-            -beta,
-            -alpha,
-            currentDepth + 1,
-            nextSearchLine,
-            entry.actionId,
-            entry.nextParticipationState,
-            context,
-          );
-      searchedFirstChild = true;
-    } else {
-      score = keepsTurn
-        ? negamax(
-            entry.nextState,
-            nextDepth,
-            alpha,
-            alpha + 1,
-            currentDepth + 1,
-            nextSearchLine,
-            entry.actionId,
-            entry.nextParticipationState,
-            context,
-          )
-        : -negamax(
-            entry.nextState,
-            nextDepth,
-            -alpha - 1,
-            -alpha,
-            currentDepth + 1,
-            nextSearchLine,
-            entry.actionId,
-            entry.nextParticipationState,
-            context,
-          );
+    searchLine.push({
+      action: entry.action,
+      actor: state.currentPlayer,
+      positionKey: entry.nextPositionKey,
+    });
 
-      if (score > alpha && score < beta) {
-        context.diagnostics.pvsResearches += 1;
+    try {
+      if (!searchedFirstChild) {
         score = keepsTurn
           ? negamax(
               entry.nextState,
@@ -207,7 +155,7 @@ export function negamax(
               alpha,
               beta,
               currentDepth + 1,
-              nextSearchLine,
+              searchLine,
               entry.actionId,
               entry.nextParticipationState,
               context,
@@ -218,12 +166,66 @@ export function negamax(
               -beta,
               -alpha,
               currentDepth + 1,
-              nextSearchLine,
+              searchLine,
               entry.actionId,
               entry.nextParticipationState,
               context,
             );
+        searchedFirstChild = true;
+      } else {
+        score = keepsTurn
+          ? negamax(
+              entry.nextState,
+              nextDepth,
+              alpha,
+              alpha + 1,
+              currentDepth + 1,
+              searchLine,
+              entry.actionId,
+              entry.nextParticipationState,
+              context,
+            )
+          : -negamax(
+              entry.nextState,
+              nextDepth,
+              -alpha - 1,
+              -alpha,
+              currentDepth + 1,
+              searchLine,
+              entry.actionId,
+              entry.nextParticipationState,
+              context,
+            );
+
+        if (score > alpha && score < beta) {
+          context.diagnostics.pvsResearches += 1;
+          score = keepsTurn
+            ? negamax(
+                entry.nextState,
+                nextDepth,
+                alpha,
+                beta,
+                currentDepth + 1,
+                searchLine,
+                entry.actionId,
+                entry.nextParticipationState,
+                context,
+              )
+            : -negamax(
+                entry.nextState,
+                nextDepth,
+                -beta,
+                -alpha,
+                currentDepth + 1,
+                searchLine,
+                entry.actionId,
+                entry.nextParticipationState,
+                context,
+              );
+        }
       }
+    } finally {
+      searchLine.pop();
     }
 
     score -= getMovePenalty(entry, context);

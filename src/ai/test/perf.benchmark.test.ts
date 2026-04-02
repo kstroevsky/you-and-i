@@ -296,3 +296,254 @@ describe('zero-logic-risk micro-opts: before vs after', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Safe-correctness-check suite: before vs after
+// ---------------------------------------------------------------------------
+
+describe('safe-correctness-check micro-opts: before vs after', () => {
+  const ITERS = 500_000;
+  const ACTION_COUNT = 2736;
+
+  console.log('\n  [correctness-check opts benchmark]');
+
+  // --- D. History scores: Map<number,number> vs Int32Array ------------------
+
+  it('D. history score lookup + update: Map<number,number> vs Int32Array', () => {
+    console.log('\n  [D] rememberCutoffMove history path (read + clamped write):');
+
+    const histMap = new Map<number, number>();
+    const histArr = new Int32Array(ACTION_COUNT);
+    const ids = [42, 137, 800, 1200, 2000];
+    const bonus = 4 * 24; // depth=2, bonus*24
+
+    bench('OLD  map.get(id) ?? 0 + map.set(id, min(32k, val+bonus))', ITERS, () => {
+      for (const id of ids) {
+        const cur = histMap.get(id) ?? 0;
+        histMap.set(id, Math.min(32_000, cur + bonus));
+      }
+    });
+
+    bench('NEW  arr[id] + arr[id] = min(32k, arr[id]+bonus)', ITERS, () => {
+      for (const id of ids) {
+        histArr[id] = Math.min(32_000, histArr[id] + bonus);
+      }
+    });
+  });
+
+  // --- E. History score read (getDynamicScore path) -------------------------
+
+  it('E. history score read: Map.get vs Int32Array index', () => {
+    console.log('\n  [E] getDynamicScore history read (per-action in hot loop):');
+
+    const histMap = new Map<number, number>([[42, 8000], [137, 4000], [800, 12000]]);
+    const histArr = new Int32Array(ACTION_COUNT);
+    histArr[42] = 8000; histArr[137] = 4000; histArr[800] = 12000;
+    const ids = [42, 137, 800, 1200, 2000, 500, 1500, 2200, 10, 99];
+
+    bench('OLD  id >= 0 ? (map.get(id) ?? 0) : 0', ITERS, () => {
+      for (const id of ids) void (id >= 0 ? (histMap.get(id) ?? 0) : 0);
+    });
+
+    bench('NEW  id >= 0 ? arr[id] : 0', ITERS, () => {
+      for (const id of ids) void (id >= 0 ? histArr[id] : 0);
+    });
+  });
+
+  // --- F. Killer write: spread+slice vs in-place mutation -------------------
+
+  it('F. killer move write: [id,...killers].slice(2) vs in-place array mutation', () => {
+    console.log('\n  [F] rememberCutoffMove killer write (on every beta cutoff):');
+
+    const killerMapOld = new Map<number, number[]>();
+    const killerMapNew = new Map<number, number[]>();
+    const depth = 3;
+    const id = 512;
+
+    bench('OLD  map.get + spread + slice + map.set', ITERS, () => {
+      const killers = killerMapOld.get(depth) ?? [];
+      if (!killers.includes(id)) {
+        killerMapOld.set(depth, [id, ...killers].slice(0, 2));
+      }
+    });
+
+    bench('NEW  map.get + in-place push/shift (no spread, no alloc)', ITERS, () => {
+      const killers = killerMapNew.get(depth);
+      if (killers === undefined) {
+        killerMapNew.set(depth, [id]);
+      } else if (!killers.includes(id)) {
+        if (killers.length < 2) killers.push(id);
+        else { killers[1] = killers[0]; killers[0] = id; }
+      }
+    });
+  });
+
+  // --- G. Killer read: Map.get (unchanged) ----------------------------------
+
+  it('G. killer read: Map.get(depth)??[] — confirming no regression', () => {
+    console.log('\n  [G] killer read per orderMoves call (once per node):');
+
+    const killerMap = new Map<number, number[]>([[3, [512, 768]]]);
+    const depth = 3;
+
+    bench('SAME map.get(depth) ?? []  (read path unchanged)', ITERS, () => {
+      void (killerMap.get(depth) ?? []);
+    });
+
+    bench('SAME map.get(depth) ?? []  (cold — depth not found)', ITERS, () => {
+      void (killerMap.get(99) ?? []);
+    });
+  });
+
+  // --- H. Search line: array spread vs push/pop ----------------------------
+
+  it('H. search line: [...line, entry] vs line.push(entry) + line.pop()', () => {
+    console.log('\n  [H] search line extension per recursive call (depth-8 simulation):');
+
+    const entry = { action: { type: 'climbOne', source: 'A1', target: 'B2' } as never, actor: 'white' as never, positionKey: 'abc' };
+    const mutableLine: typeof entry[] = [];
+
+    bench('OLD  [...searchLine, entry]  (new array each call)', ITERS, () => {
+      const line0: typeof entry[] = [];
+      const line1 = [...line0, entry];
+      const line2 = [...line1, entry];
+      const line3 = [...line2, entry];
+      const line4 = [...line3, entry];
+      void line4;
+    });
+
+    bench('NEW  push + pop  (shared mutable array)', ITERS, () => {
+      mutableLine.push(entry);
+      mutableLine.push(entry);
+      mutableLine.push(entry);
+      mutableLine.push(entry);
+      mutableLine.pop();
+      mutableLine.pop();
+      mutableLine.pop();
+      mutableLine.pop();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Realistic history heuristic: Map<number,number> vs Int32Array
+//
+// Simulates real search conditions: history accumulates hundreds of entries
+// across iterative deepening, and the hot loop queries a mix of frequently
+// recurring IDs (re-searched positions) and cold IDs (novel moves).
+// ---------------------------------------------------------------------------
+
+describe('history heuristic: realistic Map vs Int32Array comparison', () => {
+  const ACTION_COUNT = 2736;
+  const ITERS = 200_000;
+
+  // Build a seeded-random sequence so every run is deterministic
+  function lcg(seed: number): () => number {
+    let s = seed;
+    return () => {
+      s = (Math.imul(1664525, s) + 1013904223) | 0;
+      return (s >>> 0) / 0xffffffff;
+    };
+  }
+
+  /** Populate Map and Int32Array with `fillCount` unique random IDs */
+  function buildHistory(fillCount: number, rand: () => number): {
+    histMap: Map<number, number>;
+    histArr: Int32Array;
+    hotIds: number[];   // top 10% most-seen IDs (simulating re-searched positions)
+    coldIds: number[];  // bottom 30% (novel moves, queried once)
+    allIds: number[];
+  } {
+    const ids = new Set<number>();
+    while (ids.size < fillCount) {
+      ids.add(Math.floor(rand() * ACTION_COUNT));
+    }
+    const allIds = [...ids];
+    const histMap = new Map<number, number>();
+    const histArr = new Int32Array(ACTION_COUNT);
+    // Assign plausible scores (0–32000, skewed toward lower values)
+    for (const id of allIds) {
+      const score = Math.floor(rand() * 32_000);
+      histMap.set(id, score);
+      histArr[id] = score;
+    }
+    const hotIds = allIds.slice(0, Math.max(1, Math.floor(fillCount * 0.1)));
+    const coldIds = allIds.slice(Math.floor(fillCount * 0.7));
+    return { histMap, histArr, hotIds, coldIds, allIds };
+  }
+
+  /** Build a realistic query sequence: 60% hot IDs (repeated), 40% cold/miss */
+  function buildQuerySeq(hotIds: number[], coldIds: number[], rand: () => number, len = 200): number[] {
+    const seq: number[] = [];
+    for (let i = 0; i < len; i++) {
+      if (rand() < 0.6) {
+        seq.push(hotIds[Math.floor(rand() * hotIds.length)]!);
+      } else if (coldIds.length > 0 && rand() < 0.5) {
+        seq.push(coldIds[Math.floor(rand() * coldIds.length)]!);
+      } else {
+        // Miss: ID not in history (novel move)
+        seq.push(Math.floor(rand() * ACTION_COUNT));
+      }
+    }
+    return seq;
+  }
+
+  const bonus = 4 * 24; // depth=2 typical
+
+  for (const fillCount of [50, 300, 800, 1500]) {
+    it(`history read+write at ${fillCount} entries: Map vs Int32Array`, () => {
+      console.log(`\n  [realistic-${fillCount}] History at ${fillCount} entries — read+write cycle:`);
+
+      const rand = lcg(fillCount * 31337);
+      const { histMap, histArr, hotIds, coldIds } = buildHistory(fillCount, rand);
+      const querySeq = buildQuerySeq(hotIds, coldIds, rand);
+
+      // Clone so write-path benches don't pollute each other across iterations
+      const baseMap = new Map(histMap);
+      const baseArr = Int32Array.from(histArr);
+
+      // Reset to base state before each bench — done once before bench() not inside fn
+      // (bench() runs fn() repeatedly; we want the map/array to grow naturally as in
+      //  real search, not be reset between iterations)
+      const writeMap = new Map(baseMap);
+      const writeArr = Int32Array.from(baseArr);
+
+      bench(
+        `OLD  Map.get(id)??0 + Map.set(id,…)  [${fillCount} entries]`,
+        ITERS,
+        () => {
+          for (const id of querySeq) {
+            const cur = writeMap.get(id) ?? 0;
+            writeMap.set(id, Math.min(32_000, cur + bonus));
+          }
+        },
+      );
+
+      bench(
+        `NEW  arr[id] + arr[id]=…              [${fillCount} entries]`,
+        ITERS,
+        () => {
+          for (const id of querySeq) {
+            writeArr[id] = Math.min(32_000, (writeArr[id] ?? 0) + bonus);
+          }
+        },
+      );
+    });
+  }
+
+  it('history read-only at 800 entries: Map.get vs arr[] (no write)', () => {
+    console.log('\n  [realistic-read-only] Read-only path (getDynamicScore, 800 entries):');
+
+    const rand = lcg(800 * 99991);
+    const { histMap, histArr, hotIds, coldIds } = buildHistory(800, rand);
+    const querySeq = buildQuerySeq(hotIds, coldIds, rand);
+
+    bench('OLD  id>=0 ? (map.get(id)??0) : 0  [800 entries, mixed hot/cold]', ITERS, () => {
+      for (const id of querySeq) void (id >= 0 ? (histMap.get(id) ?? 0) : 0);
+    });
+
+    bench('NEW  id>=0 ? arr[id] : 0            [800 entries, mixed hot/cold]', ITERS, () => {
+      for (const id of querySeq) void (id >= 0 ? histArr[id] : 0);
+    });
+  });
+});

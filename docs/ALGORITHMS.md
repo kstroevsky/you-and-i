@@ -200,6 +200,8 @@ Implementation notes:
 - Bounded TT entries are stored as `exact`, `lower`, or `upper`, not just raw scores.
 - When the TT reaches its `50_000`-entry cap, YOUI evicts the oldest inserted entry before storing the new one. The replacement policy is therefore simple FIFO-by-insertion-order, not depth-preferred replacement.
 - Move penalties are applied after child search, which keeps tactical truth primary but lets repetition and self-undo still matter.
+- The search line is a single shared mutable `SearchLineEntry[]` passed by reference through the recursion. Before each recursive call the current move entry is pushed; a `try/finally` block pops it after the call returns (or throws a timeout). This avoids one `[...spread]` array allocation per node — at depth 5 with branching factor ~20 that is roughly 400 K array copies per search saved.
+
 Trade-offs:
 
 - Very strong for deterministic tactical games.

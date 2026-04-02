@@ -595,8 +595,8 @@ Step by step:
 Implementation notes:
 
 - Works well because sibling nodes often share tactical motifs.
-- YOUI stores multiple killers per depth, not only one.
-- Killers are stored as numeric action IDs (`number[]`) rather than `TurnAction[]`, making depth-indexed lookup and equality checks trivially cheap.
+- YOUI stores up to two killers per depth.
+- Killers are stored in a `Map<number, number[]>`, one entry per depth. The read path returns an existing array reference (no allocation). The write path on beta cutoffs mutates the stored array in place: `killers.push(id)` when the slot is free, or `killers[1] = killers[0]; killers[0] = id` when shifting — no spread, no slice, no intermediate array.
 
 ### 2.5 Continuation Heuristic
 

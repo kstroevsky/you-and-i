@@ -105,13 +105,23 @@ export function rememberCutoffMove(
     );
   }
 
-  const killers = context.killerMovesByDepth.get(currentDepth) ?? [];
+  const killers = context.killerMovesByDepth.get(currentDepth);
+
+  if (killers === undefined) {
+    context.killerMovesByDepth.set(currentDepth, [id]);
+    return;
+  }
 
   if (killers.includes(id)) {
     return;
   }
 
-  context.killerMovesByDepth.set(currentDepth, [id, ...killers].slice(0, 2));
+  if (killers.length < 2) {
+    killers.push(id);
+  } else {
+    killers[1] = killers[0];
+    killers[0] = id;
+  }
 }
 
 /** Converts internal ranked-root data into the public diagnostic result shape. */

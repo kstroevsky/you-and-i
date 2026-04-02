@@ -338,10 +338,16 @@ function finalizeOrderedActions(
   }
 
   // Harder difficulties search deeper and wider, but tactical moves are always preserved.
-  const tacticalMoves = ordered.filter((entry) => entry.isTactical);
-  const quietMoves = ordered
-    .filter((entry) => !entry.isTactical)
-    .slice(0, preset.quietMoveLimit);
+  const tacticalMoves: OrderedAction[] = [];
+  const quietMoves: OrderedAction[] = [];
+
+  for (const entry of ordered) {
+    if (entry.isTactical) {
+      tacticalMoves.push(entry);
+    } else if (quietMoves.length < preset.quietMoveLimit) {
+      quietMoves.push(entry);
+    }
+  }
 
   return [...tacticalMoves, ...quietMoves];
 }

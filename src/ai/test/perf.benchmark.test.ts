@@ -215,3 +215,84 @@ describe('numeric-action-id refactor: before vs after', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Micro-optimisation suite: zero-logic-risk changes
+// ---------------------------------------------------------------------------
+
+describe('zero-logic-risk micro-opts: before vs after', () => {
+  const ITERS = 500_000;
+
+  console.log('\n  [micro-opts benchmark]');
+
+  // --- A. Quiet-move filter: two-pass vs single-pass -------------------------
+
+  it('A. quiet-move filter: two filter() calls vs single for-loop pass', () => {
+    console.log('\n  [A] finalizeOrderedActions trimming (100 moves, quietMoveLimit=20):');
+
+    const MOVE_COUNT = 100;
+    const QUIET_LIMIT = 20;
+
+    // Simulate an ordered list: first 10 tactical, rest quiet (already sorted)
+    const ordered = Array.from({ length: MOVE_COUNT }, (_, i) => ({
+      isTactical: i < 10,
+      score: MOVE_COUNT - i,
+    }));
+
+    bench('OLD  filter(tactical) + filter(quiet).slice(limit)', ITERS, () => {
+      const tacticalMoves = ordered.filter((e) => e.isTactical);
+      const quietMoves = ordered.filter((e) => !e.isTactical).slice(0, QUIET_LIMIT);
+      void [...tacticalMoves, ...quietMoves];
+    });
+
+    bench('NEW  single for-loop, early stop on quiet limit', ITERS, () => {
+      const tacticalMoves: typeof ordered = [];
+      const quietMoves: typeof ordered = [];
+      for (const entry of ordered) {
+        if (entry.isTactical) {
+          tacticalMoves.push(entry);
+        } else if (quietMoves.length < QUIET_LIMIT) {
+          quietMoves.push(entry);
+        }
+      }
+      void [...tacticalMoves, ...quietMoves];
+    });
+  }, 30_000);
+
+  // --- B. Root PV move: Map.get/set vs plain variable -----------------------
+
+  it('B. root PV move: Map<number,number>.get/set(0) vs plain let variable', () => {
+    console.log('\n  [B] Root PV move read+write per depth iteration:');
+
+    const pvMap = new Map<number, number>();
+    let pvVar: number | null = null;
+    const actionIdValue = 1337;
+
+    bench('OLD  pvMoveByDepth.get(0) + pvMoveByDepth.set(0, id)', ITERS, () => {
+      void (pvMap.get(0) ?? null);
+      pvMap.set(0, actionIdValue);
+    });
+
+    bench('NEW  rootPvMoveId (plain let)', ITERS, () => {
+      void pvVar;
+      pvVar = actionIdValue;
+    });
+  });
+
+  // --- C. Timeout error: new Error() vs pre-allocated singleton -------------
+
+  it('C. timeout error: new Error(msg) vs pre-allocated singleton', () => {
+    console.log('\n  [C] Error object allocation (not throw — just construction cost):');
+
+    const SENTINEL = 'AI_SEARCH_TIMEOUT';
+    const PREALLOC = new Error(SENTINEL);
+
+    bench('OLD  new Error(AI_SEARCH_TIMEOUT) on every timeout', ITERS, () => {
+      void new Error(SENTINEL);
+    });
+
+    bench('NEW  reuse pre-allocated singleton', ITERS, () => {
+      void PREALLOC;
+    });
+  });
+});

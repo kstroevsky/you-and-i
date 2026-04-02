@@ -339,6 +339,7 @@ export function chooseComputerAction({
   let timedOut = false;
   let rootCandidates: RootRankedAction[] = [];
   let rootOrderedMoves: OrderedAction[] = [];
+  let rootPvMoveId: number | null = null;
 
   const getRootPrecomputed = (): PrecomputedOrderedAction[] => {
     if (!rootPrecomputedActions.length) {
@@ -474,7 +475,7 @@ export function chooseComputerAction({
     betaWindow: number,
   ): RootRankedAction[] => {
     const ranked: RootRankedAction[] = [];
-    const orderedMoves = buildRootOrdering(context.pvMoveByDepth.get(0) ?? null);
+    const orderedMoves = buildRootOrdering(rootPvMoveId);
 
     context.diagnostics.policyPriorHits += countPolicyPriorHits(orderedMoves);
 
@@ -660,7 +661,7 @@ export function chooseComputerAction({
     }).action;
     fallbackKind = 'none';
 
-    context.pvMoveByDepth.set(0, actionId(bestAction));
+    rootPvMoveId = actionId(bestAction);
   }
 
   return {

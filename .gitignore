@@ -5,3 +5,4 @@ node_modules
 *.log
 .playwright-cli
 .codex-artifactss
+analysis

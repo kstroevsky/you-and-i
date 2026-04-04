@@ -401,6 +401,20 @@ function getPlayerParticipationScore(
 ): number {
   const profile = getParticipationProfile(state, player, playerState);
 
+  // Same-family streak penalty escalates super-linearly: each additional
+  // consecutive reuse of the same piece family is more expensive than the last.
+  // This is grounded in diversity-seeking search theory (Browne et al., 2012):
+  // mild reuse is tolerated but sustained repetition is strongly discouraged.
+  const familyStreakExcess = Math.max(0, profile.sameFamilyReuseStreak - 1);
+  const familyStreakPenalty =
+    familyStreakExcess * (1 + Math.max(0, familyStreakExcess - 1) * 0.6) *
+    preset.sourceReusePenalty * phaseScale;
+
+  const regionStreakExcess = Math.max(0, profile.sameRegionReuseStreak - 1);
+  const regionStreakPenalty =
+    regionStreakExcess * (1 + Math.max(0, regionStreakExcess - 1) * 0.4) *
+    preset.familyVarietyWeight * phaseScale;
+
   return (
     profile.frontierWidth * preset.frontierWidthWeight * phaseScale +
     profile.activeCheckerCount * preset.participationBias * 0.45 * phaseScale +
@@ -408,8 +422,8 @@ function getPlayerParticipationScore(
     profile.idleReserveMass * preset.participationBias * 0.65 * phaseScale -
     profile.hotSourceConcentration * preset.sourceReusePenalty * phaseScale -
     profile.hotRegionConcentration * preset.familyVarietyWeight * 0.75 * phaseScale -
-    Math.max(0, profile.sameFamilyReuseStreak - 1) * preset.sourceReusePenalty * phaseScale -
-    Math.max(0, profile.sameRegionReuseStreak - 1) * preset.familyVarietyWeight * phaseScale
+    familyStreakPenalty -
+    regionStreakPenalty
   );
 }
 

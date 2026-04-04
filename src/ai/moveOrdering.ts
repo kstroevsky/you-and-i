@@ -529,7 +529,9 @@ export function precomputeOrderedActions(
 
     staticScore += clampScore(staticPromise, 8_000);
     staticScore += clampScore(strategicProfile.intentDelta, 6_000);
-    staticScore += clampScore(participationProfile.participationDelta, 2_400);
+    // Clamp raised from 2_400: the wider participation window now produces
+    // larger deltas, and capping them too tightly would negate the variety gains.
+    staticScore += clampScore(participationProfile.participationDelta, 4_000);
     staticScore += strategicProfile.policyBias;
     staticScore += getBehaviorActionBias(behaviorProfile?.id ?? null, strategicProfile.tags);
     if (state.moveNumber <= 6) {

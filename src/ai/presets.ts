@@ -10,10 +10,13 @@ export const AI_DIFFICULTY_PRESETS: Record<'easy' | 'medium' | 'hard', AiDifficu
     timeBudgetMs: 120,
     maxDepth: 2,
     participationBias: 14,
-    participationWindow: 2,
+    // Extended from 2: longer window makes the AI penalise same-piece reuse
+    // across more of its recent moves, reducing sameFamilyQuietRepeatRate.
+    participationWindow: 5,
     policyPriorWeight: 80,
     quietMoveLimit: 8,
-    repetitionPenalty: 120,
+    // Raised from 120: stronger penalty for returning to already-visited positions.
+    repetitionPenalty: 160,
     riskBandWidening: 0.08,
     riskLoopPenalty: 260,
     riskPolicyPriorScale: 0.45,
@@ -21,7 +24,8 @@ export const AI_DIFFICULTY_PRESETS: Record<'easy' | 'medium' | 'hard', AiDifficu
     riskTacticalBonus: 280,
     selfUndoPenalty: 220,
     rootCandidateLimit: 4,
-    sourceReusePenalty: 70,
+    // Raised from 70: stronger deterrent for reusing the same piece family.
+    sourceReusePenalty: 90,
     stagnationDisplacementWeight: 16,
     stagnationMobilityWeight: 14,
     stagnationProgressWeight: 26,
@@ -33,25 +37,31 @@ export const AI_DIFFICULTY_PRESETS: Record<'easy' | 'medium' | 'hard', AiDifficu
     varietyTopCount: 3,
   },
   medium: {
-    drawAversionAhead: 180,
+    // Raised from 180: pushes harder toward decisive play.
+    drawAversionAhead: 220,
     drawAversionBehindRelief: 60,
     familyVarietyWeight: 42,
     frontierWidthWeight: 28,
     timeBudgetMs: 400,
     maxDepth: 4,
     participationBias: 18,
-    participationWindow: 3,
+    // Extended from 3: 8-move memory window keeps the AI aware of repeated
+    // piece families over a longer horizon, directly reducing repetition rate.
+    participationWindow: 8,
     policyPriorWeight: 140,
     quietMoveLimit: 16,
-    repetitionPenalty: 180,
+    // Raised from 180.
+    repetitionPenalty: 240,
     riskBandWidening: 0.06,
-    riskLoopPenalty: 220,
+    // Raised from 220: higher cost for looping moves at this skill level.
+    riskLoopPenalty: 280,
     riskPolicyPriorScale: 0.6,
     riskProgressBonus: 360,
     riskTacticalBonus: 240,
     selfUndoPenalty: 320,
     rootCandidateLimit: 5,
-    sourceReusePenalty: 100,
+    // Raised from 100.
+    sourceReusePenalty: 130,
     stagnationDisplacementWeight: 15,
     stagnationMobilityWeight: 14,
     stagnationProgressWeight: 24,
@@ -63,25 +73,33 @@ export const AI_DIFFICULTY_PRESETS: Record<'easy' | 'medium' | 'hard', AiDifficu
     varietyTopCount: 2,
   },
   hard: {
-    drawAversionAhead: 140,
+    // Raised from 140: the AI must actively seek decisive outcomes rather
+    // than accepting draws when ahead; addresses decisiveResultShare → 0.
+    drawAversionAhead: 200,
     drawAversionBehindRelief: 50,
     familyVarietyWeight: 56,
     frontierWidthWeight: 36,
     timeBudgetMs: 1200,
     maxDepth: 6,
     participationBias: 24,
-    participationWindow: 3,
+    // Extended from 3: 10-move window is the primary lever against the
+    // sameFamilyQuietRepeatRate regression introduced by the one-color
+    // pendingJump constraint.  Longer memory ≈ broader piece engagement.
+    participationWindow: 10,
     policyPriorWeight: 220,
     quietMoveLimit: 28,
-    repetitionPenalty: 300,
+    // Raised from 300: repetition loops must be more costly than advancing.
+    repetitionPenalty: 400,
     riskBandWidening: 0.04,
-    riskLoopPenalty: 240,
+    // Raised from 240: draws in loop-pressure positions are now more expensive.
+    riskLoopPenalty: 320,
     riskPolicyPriorScale: 0.72,
     riskProgressBonus: 280,
     riskTacticalBonus: 200,
     selfUndoPenalty: 460,
     rootCandidateLimit: 6,
-    sourceReusePenalty: 140,
+    // Raised from 140.
+    sourceReusePenalty: 180,
     stagnationDisplacementWeight: 14,
     stagnationMobilityWeight: 14,
     stagnationProgressWeight: 22,

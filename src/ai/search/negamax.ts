@@ -13,7 +13,7 @@ import {
   TRANSPOSITION_LIMIT,
 } from '@/ai/search/heuristics';
 import { makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
-import type { BoundFlag, SearchContext, SearchLineEntry } from '@/ai/search/types';
+import type { BoundFlag, SearchContext, SearchStack } from '@/ai/search/types';
 import { quiescence } from '@/ai/search/quiescence';
 
 /** Main negamax search with alpha-beta pruning and transposition lookups. */
@@ -23,7 +23,7 @@ export function negamax(
   alpha: number,
   beta: number,
   currentDepth: number,
-  searchLine: SearchLineEntry[],
+  stack: SearchStack,
   previousActionId: number | null,
   participationState: ParticipationState,
   context: SearchContext,
@@ -76,7 +76,7 @@ export function negamax(
       alpha,
       beta,
       currentDepth,
-      searchLine,
+      stack,
       previousActionId,
       participationState,
       context,
@@ -88,7 +88,7 @@ export function negamax(
     deadline: context.deadline,
     grandparentPositionKey: getPreviousOwnPositionKeyFromLine(
       state.currentPlayer,
-      searchLine,
+      stack,
       context,
     ),
     historyScores: context.historyScores,
@@ -105,7 +105,7 @@ export function negamax(
     riskMode: context.riskMode,
     samePlayerPreviousAction: getPreviousOwnActionFromLine(
       state.currentPlayer,
-      searchLine,
+      stack,
       context,
     ),
     selfUndoPenalty: context.preset.selfUndoPenalty,
@@ -140,11 +140,13 @@ export function negamax(
     const nextDepth = Math.max(0, depth - 1 + extension);
     let score: number;
 
-    searchLine.push({
+    // Write into the pre-allocated slot at the current depth; no array resize.
+    stack.entries[stack.depth] = {
       action: entry.action,
       actor: state.currentPlayer,
       positionKey: entry.nextPositionKey,
-    });
+    };
+    stack.depth += 1;
 
     try {
       if (!searchedFirstChild) {
@@ -155,7 +157,7 @@ export function negamax(
               alpha,
               beta,
               currentDepth + 1,
-              searchLine,
+              stack,
               entry.actionId,
               entry.nextParticipationState,
               context,
@@ -166,7 +168,7 @@ export function negamax(
               -beta,
               -alpha,
               currentDepth + 1,
-              searchLine,
+              stack,
               entry.actionId,
               entry.nextParticipationState,
               context,
@@ -180,7 +182,7 @@ export function negamax(
               alpha,
               alpha + 1,
               currentDepth + 1,
-              searchLine,
+              stack,
               entry.actionId,
               entry.nextParticipationState,
               context,
@@ -191,7 +193,7 @@ export function negamax(
               -alpha - 1,
               -alpha,
               currentDepth + 1,
-              searchLine,
+              stack,
               entry.actionId,
               entry.nextParticipationState,
               context,
@@ -206,7 +208,7 @@ export function negamax(
                 alpha,
                 beta,
                 currentDepth + 1,
-                searchLine,
+                stack,
                 entry.actionId,
                 entry.nextParticipationState,
                 context,
@@ -217,7 +219,7 @@ export function negamax(
                 -beta,
                 -alpha,
                 currentDepth + 1,
-                searchLine,
+                stack,
                 entry.actionId,
                 entry.nextParticipationState,
                 context,
@@ -225,7 +227,7 @@ export function negamax(
         }
       }
     } finally {
-      searchLine.pop();
+      stack.depth -= 1;
     }
 
     score -= getMovePenalty(entry, context);

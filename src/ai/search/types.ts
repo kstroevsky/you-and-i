@@ -26,6 +26,23 @@ export type SearchLineEntry = {
   positionKey: string;
 };
 
+/**
+ * Fixed-capacity search stack that avoids Array.prototype.push/pop mutations.
+ *
+ * Using a pre-allocated backing array with an explicit depth cursor keeps the
+ * array's `length` property stable throughout the search.  V8 can then treat
+ * the backing store as a "packed fast-elements" array and apply stronger JIT
+ * optimisations than it can on a dynamically-growing array whose `length`
+ * changes on every ply.  This is the JavaScript equivalent of Stockfish's
+ * stack-allocated `Stack ss[]` idiom.
+ */
+export type SearchStack = {
+  /** Pre-allocated backing store.  Only indices [0, depth) hold valid entries. */
+  entries: (SearchLineEntry | undefined)[];
+  /** Logical stack depth / cursor.  Mutated in place by push/pop callers. */
+  depth: number;
+};
+
 export type RootRankedAction = Pick<
   OrderedAction,
   | 'action'

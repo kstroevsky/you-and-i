@@ -12,13 +12,13 @@ import {
   getPreviousOwnPositionKeyFromLine,
 } from '@/ai/search/heuristics';
 import { actionId, makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
-import type { SearchContext, SearchLineEntry } from '@/ai/search/types';
+import type { SearchContext, SearchStack } from '@/ai/search/types';
 
 /** Chooses forcing moves only for the quiescence tail below the main search frontier. */
 export function getQuiescenceMoves(
   state: EngineState,
   currentDepth: number,
-  searchLine: SearchLineEntry[],
+  stack: SearchStack,
   previousActionId: number | null,
   participationState: ParticipationState,
   context: SearchContext,
@@ -63,7 +63,7 @@ export function getQuiescenceMoves(
     deadline: context.deadline,
     grandparentPositionKey: getPreviousOwnPositionKeyFromLine(
       state.currentPlayer,
-      searchLine,
+      stack,
       context,
     ),
     historyScores: context.historyScores,
@@ -81,7 +81,7 @@ export function getQuiescenceMoves(
     riskMode: context.riskMode,
     samePlayerPreviousAction: getPreviousOwnActionFromLine(
       state.currentPlayer,
-      searchLine,
+      stack,
       context,
     ),
     selfUndoPenalty: context.preset.selfUndoPenalty,
@@ -108,7 +108,7 @@ export function quiescence(
   alpha: number,
   beta: number,
   currentDepth: number,
-  searchLine: SearchLineEntry[],
+  stack: SearchStack,
   previousActionId: number | null,
   participationState: ParticipationState,
   context: SearchContext,
@@ -144,7 +144,7 @@ export function quiescence(
   const forcingMoves = getQuiescenceMoves(
     state,
     currentDepth,
-    searchLine,
+    stack,
     previousActionId,
     participationState,
     context,
@@ -159,11 +159,12 @@ export function quiescence(
   for (const entry of forcingMoves) {
     const keepsTurn = entry.nextState.currentPlayer === state.currentPlayer;
 
-    searchLine.push({
+    stack.entries[stack.depth] = {
       action: entry.action,
       actor: state.currentPlayer,
       positionKey: entry.nextPositionKey,
-    });
+    };
+    stack.depth += 1;
 
     let score: number;
 
@@ -174,7 +175,7 @@ export function quiescence(
             alpha,
             beta,
             currentDepth + 1,
-            searchLine,
+            stack,
             entry.actionId,
             entry.nextParticipationState,
             context,
@@ -184,13 +185,13 @@ export function quiescence(
             -beta,
             -alpha,
             currentDepth + 1,
-            searchLine,
+            stack,
             entry.actionId,
             entry.nextParticipationState,
             context,
           );
     } finally {
-      searchLine.pop();
+      stack.depth -= 1;
     }
 
     score -= getMovePenalty(entry, context);

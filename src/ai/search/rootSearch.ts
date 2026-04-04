@@ -36,7 +36,7 @@ import {
   sortRankedActions,
 } from '@/ai/search/result';
 import { actionId, isSearchTimeout, makeTableKey, throwIfTimedOut } from '@/ai/search/shared';
-import type { RootRankedAction, SearchContext, SearchLineEntry, TranspositionEntry } from '@/ai/search/types';
+import type { RootRankedAction, SearchContext, SearchStack, TranspositionEntry } from '@/ai/search/types';
 
 /**
  * Builds a minimal ranked candidate when the search must fall back before it has
@@ -477,7 +477,13 @@ export function chooseComputerAction({
   ): RootRankedAction[] => {
     const ranked: RootRankedAction[] = [];
     const orderedMoves = buildRootOrdering(rootPvMoveId);
-    const searchLine: SearchLineEntry[] = [];
+    // Pre-allocated fixed-size stack: length never changes during the search,
+    // which lets V8 keep the backing store as a stable "packed fast-elements"
+    // array and apply stronger JIT optimisations than a growing/shrinking one.
+    const stack: SearchStack = {
+      entries: new Array(preset.maxDepth + MAX_QUIESCENCE_DEPTH + 4),
+      depth: 0,
+    };
 
     context.diagnostics.policyPriorHits += countPolicyPriorHits(orderedMoves);
 
@@ -487,11 +493,12 @@ export function chooseComputerAction({
       const keepsTurn = entry.nextState.currentPlayer === state.currentPlayer;
       const nextDepth = Math.max(0, depth - 1 + getSelectiveExtension(entry, depth, 0));
 
-      searchLine.push({
+      stack.entries[stack.depth] = {
         action: entry.action,
         actor: state.currentPlayer,
         positionKey: entry.nextPositionKey,
-      });
+      };
+      stack.depth += 1;
 
       let score: number;
 
@@ -503,7 +510,7 @@ export function chooseComputerAction({
               alphaWindow,
               betaWindow,
               1,
-              searchLine,
+              stack,
               entry.actionId,
               entry.nextParticipationState,
               context,
@@ -514,13 +521,13 @@ export function chooseComputerAction({
               -betaWindow,
               -alphaWindow,
               1,
-              searchLine,
+              stack,
               entry.actionId,
               entry.nextParticipationState,
               context,
             );
       } finally {
-        searchLine.pop();
+        stack.depth -= 1;
       }
 
       score -= getMovePenalty(entry, context);
@@ -666,6 +673,14 @@ export function chooseComputerAction({
     fallbackKind = 'none';
 
     rootPvMoveId = actionId(bestAction);
+
+    // History aging (Schaeffer, 1989): shift scores right by 2 (÷4) so that
+    // cutoff moves learned at shallow depths do not dominate ordering at the
+    // next, deeper iteration.  Without aging, the history table converges on
+    // the same move order regardless of depth, reducing variety across games.
+    for (let i = 0; i < context.historyScores.length; i += 1) {
+      context.historyScores[i] >>= 2;
+    }
   }
 
   return {

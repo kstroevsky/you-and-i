@@ -8,6 +8,7 @@ import type {
   RootRankedAction,
   SearchContext,
   SearchLineEntry,
+  SearchStack,
 } from '@/ai/search/types';
 
 /** Hard cap keeps the browser-side transposition table memory bounded. */
@@ -217,10 +218,10 @@ export function getRootPreviousStrategicTags(
 
 function getPreviousOwnLineEntry(
   player: Player,
-  searchLine: SearchLineEntry[],
+  stack: SearchStack,
 ): SearchLineEntry | null {
-  for (let index = searchLine.length - 1; index >= 0; index -= 1) {
-    const entry = searchLine[index];
+  for (let index = stack.depth - 1; index >= 0; index -= 1) {
+    const entry = stack.entries[index];
 
     if (entry?.actor === player) {
       return entry;
@@ -230,13 +231,13 @@ function getPreviousOwnLineEntry(
   return null;
 }
 
-/** Resolves the latest same-side action from the actor-aware search line. */
+/** Resolves the latest same-side action from the actor-aware search stack. */
 export function getPreviousOwnActionFromLine(
   player: Player,
-  searchLine: SearchLineEntry[],
+  stack: SearchStack,
   context: SearchContext,
 ): TurnAction | null {
-  const lineEntry = getPreviousOwnLineEntry(player, searchLine);
+  const lineEntry = getPreviousOwnLineEntry(player, stack);
 
   if (lineEntry) {
     return lineEntry.action;
@@ -245,13 +246,13 @@ export function getPreviousOwnActionFromLine(
   return player === context.rootPlayer ? context.rootPreviousOwnAction : null;
 }
 
-/** Resolves the latest same-side position key from the actor-aware search line. */
+/** Resolves the latest same-side position key from the actor-aware search stack. */
 export function getPreviousOwnPositionKeyFromLine(
   player: Player,
-  searchLine: SearchLineEntry[],
+  stack: SearchStack,
   context: SearchContext,
 ): string | null {
-  const lineEntry = getPreviousOwnLineEntry(player, searchLine);
+  const lineEntry = getPreviousOwnLineEntry(player, stack);
 
   if (lineEntry) {
     return lineEntry.positionKey;

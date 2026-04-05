@@ -82,15 +82,23 @@ function collectAdjacentTargets(
 }
 
 function getClimbTargets(board: EngineState['board'], source: Coord): Coord[] {
-  return collectAdjacentTargets(board, source, canLandOnOccupiedCell);
+  return collectAdjacentTargets(board, source, (nextBoard, target) =>
+    canLandOnOccupiedCell(nextBoard, target, 1),
+  );
 }
 
 function getSingleStepTargets(board: EngineState['board'], source: Coord): Coord[] {
   return collectAdjacentTargets(board, source, isEmptyCell);
 }
 
-function getSplitTargets(board: EngineState['board'], source: Coord): Coord[] {
-  return collectAdjacentTargets(board, source, isEmptyCell);
+function getSplitTargets(
+  board: EngineState['board'],
+  source: Coord,
+  movingCount: number,
+): Coord[] {
+  return collectAdjacentTargets(board, source, (nextBoard, target) => {
+    return isEmptyCell(nextBoard, target) || canLandOnOccupiedCell(nextBoard, target, movingCount);
+  });
 }
 
 function getFriendlyTransferTargets(
@@ -113,7 +121,7 @@ function getFriendlyTransferTargets(
     if (
       isStack(board, coord) &&
       getController(board, coord) === player &&
-      getCellHeight(board, coord) < 3
+      canLandOnOccupiedCell(board, coord, 1)
     ) {
       targets.push(coord);
     }
@@ -256,7 +264,7 @@ const actionHandlers = {
   splitOneFromStack: {
     kind: 'splitOneFromStack',
     getActions: (state, coord, _config) => {
-      return getSplitTargets(state.board, coord).map((target) => ({
+      return getSplitTargets(state.board, coord, 1).map((target) => ({
         type: 'splitOneFromStack' as const,
         source: coord,
         target,
@@ -274,7 +282,7 @@ const actionHandlers = {
   splitTwoFromStack: {
     kind: 'splitTwoFromStack',
     getActions: (state, coord, _config) => {
-      return getSplitTargets(state.board, coord).map((target) => ({
+      return getSplitTargets(state.board, coord, 2).map((target) => ({
         type: 'splitTwoFromStack' as const,
         source: coord,
         target,

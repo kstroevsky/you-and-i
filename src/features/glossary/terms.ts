@@ -82,9 +82,9 @@ const GLOSSARY: Record<GlossaryTermId, GlossaryEntry> = {
       ukrainian: 'Схід однієї',
     },
     description: {
-      english: 'Move only the top checker from your controlled stack to one adjacent cell.',
-      russian: 'Снять только верхнюю шашку со своей горки и перенести её на соседнюю клетку.',
-      ukrainian: 'Зняти тільки верхню шашку зі своєї гірки та перенести її на сусідню клітинку.',
+      english: 'Move only the top checker from your controlled stack to one adjacent cell, empty or legally occupied.',
+      russian: 'Снять только верхнюю шашку со своей горки и перенести её на соседнюю клетку, пустую или допустимо занятую.',
+      ukrainian: 'Зняти тільки верхню шашку зі своєї гірки та перенести її на сусідню клітинку, порожню або допустимо зайняту.',
     },
   },
   splitTwoFromStack: {
@@ -94,9 +94,9 @@ const GLOSSARY: Record<GlossaryTermId, GlossaryEntry> = {
       ukrainian: 'Схід двома',
     },
     description: {
-      english: 'Move the top two checkers together from your controlled stack onto an adjacent empty cell.',
-      russian: 'Снять две верхние шашки вместе со своей горки и поставить их на соседнюю пустую клетку.',
-      ukrainian: 'Зняти дві верхні шашки разом зі своєї гірки і поставити їх на сусідню порожню клітинку.',
+      english: 'Move the top two checkers together from your controlled stack to one adjacent cell, empty or legally occupied.',
+      russian: 'Снять две верхние шашки вместе со своей горки и перенести их на соседнюю клетку, пустую или допустимо занятую.',
+      ukrainian: 'Зняти дві верхні шашки разом зі своєї гірки та перенести їх на сусідню клітинку, порожню або допустимо зайняту.',
     },
   },
   friendlyStackTransfer: {

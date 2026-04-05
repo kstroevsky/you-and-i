@@ -62,8 +62,8 @@ The engine uses an explicit action union rather than a generic `{ source, target
 | `jumpSequence` | execute one jump segment to an empty landing cell |
 | `climbOne` | move one checker onto an adjacent occupied active cell |
 | `moveSingleToEmpty` | move an active single, or an entire controlled stack, one cell to an adjacent empty cell |
-| `splitOneFromStack` | peel the top checker from a controlled stack to an adjacent empty cell |
-| `splitTwoFromStack` | peel the top two checkers together to an adjacent empty cell |
+| `splitOneFromStack` | peel the top checker from a controlled stack to an adjacent empty or legal occupied cell |
+| `splitTwoFromStack` | peel the top two checkers together to an adjacent empty or legal occupied cell |
 | `friendlyStackTransfer` | optional non-adjacent move from one controlled stack to another controlled stack |
 
 This explicit action language keeps legality, serialization, and AI move ordering aligned around the same semantic vocabulary.

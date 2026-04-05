@@ -41,8 +41,12 @@ export function isMovableSingle(board: Board, coord: Coord, player: Player): boo
   return isSingleChecker(board, coord) && checker?.owner === player && !checker.frozen;
 }
 
-/** Checks climb/transfer landing constraints for occupied target cells. */
-export function canLandOnOccupiedCell(board: Board, target: Coord): boolean {
+/** Checks occupied-target landing constraints for incoming checkers. */
+export function canLandOnOccupiedCell(
+  board: Board,
+  target: Coord,
+  incomingCheckerCount = 1,
+): boolean {
   if (isEmptyCell(board, target)) {
     return false;
   }
@@ -51,7 +55,7 @@ export function canLandOnOccupiedCell(board: Board, target: Coord): boolean {
     return false;
   }
 
-  return getCellHeight(board, target) < 3;
+  return getCellHeight(board, target) + incomingCheckerCount <= 3;
 }
 
 /** Checks whether a jump may pass over a middle cell. */

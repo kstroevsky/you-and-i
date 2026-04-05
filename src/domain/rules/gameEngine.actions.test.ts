@@ -111,6 +111,188 @@ describe('game engine action application', () => {
     expect(afterSplitTwo.board.C4.checkers).toHaveLength(2);
   });
 
+  it('generates legal occupied split targets and rejects frozen or over-height landings', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        C3: [checker('black'), checker('white'), checker('white')],
+        B2: [checker('black')],
+        C4: [checker('black'), checker('white')],
+        D4: [checker('black', true)],
+        F6: [checker('black')],
+      }),
+    );
+
+    const splitOneActions = getLegalActionsForCell(state, 'C3', withConfig()).filter(
+      (action) => action.type === 'splitOneFromStack',
+    );
+    const splitTwoActions = getLegalActionsForCell(state, 'C3', withConfig()).filter(
+      (action) => action.type === 'splitTwoFromStack',
+    );
+
+    expect(splitOneActions).toContainEqual({
+      type: 'splitOneFromStack',
+      source: 'C3',
+      target: 'B3',
+    });
+    expect(splitOneActions).toContainEqual({
+      type: 'splitOneFromStack',
+      source: 'C3',
+      target: 'B2',
+    });
+    expect(splitOneActions).toContainEqual({
+      type: 'splitOneFromStack',
+      source: 'C3',
+      target: 'C4',
+    });
+    expect(splitOneActions).not.toContainEqual({
+      type: 'splitOneFromStack',
+      source: 'C3',
+      target: 'D4',
+    });
+
+    expect(splitTwoActions).toContainEqual({
+      type: 'splitTwoFromStack',
+      source: 'C3',
+      target: 'B3',
+    });
+    expect(splitTwoActions).toContainEqual({
+      type: 'splitTwoFromStack',
+      source: 'C3',
+      target: 'B2',
+    });
+    expect(splitTwoActions).not.toContainEqual({
+      type: 'splitTwoFromStack',
+      source: 'C3',
+      target: 'C4',
+    });
+    expect(splitTwoActions).not.toContainEqual({
+      type: 'splitTwoFromStack',
+      source: 'C3',
+      target: 'D4',
+    });
+  });
+
+  it('applies split moves onto occupied cells and preserves moved checker order', () => {
+    const splitOneState = gameStateWithBoard(
+      boardWithPieces({
+        C3: [checker('black'), checker('white'), checker('white')],
+        C4: [checker('black'), checker('black')],
+      }),
+    );
+    const afterSplitOne = applyAction(
+      splitOneState,
+      {
+        type: 'splitOneFromStack',
+        source: 'C3',
+        target: 'C4',
+      },
+      withConfig(),
+    );
+
+    expect(afterSplitOne.board.C3.checkers.map((entry) => entry.owner)).toEqual([
+      'black',
+      'white',
+    ]);
+    expect(afterSplitOne.board.C4.checkers.map((entry) => entry.owner)).toEqual([
+      'black',
+      'black',
+      'white',
+    ]);
+
+    const bottomWhite = checker('white');
+    const middleBlack = checker('black');
+    const topWhite = checker('white');
+    const targetBlack = checker('black');
+    const splitTwoState = gameStateWithBoard(
+      boardWithPieces({
+        C3: [bottomWhite, middleBlack, topWhite],
+        B2: [targetBlack],
+      }),
+    );
+    const afterSplitTwo = applyAction(
+      splitTwoState,
+      {
+        type: 'splitTwoFromStack',
+        source: 'C3',
+        target: 'B2',
+      },
+      withConfig(),
+    );
+
+    expect(afterSplitTwo.board.C3.checkers.map((entry) => entry.id)).toEqual([bottomWhite.id]);
+    expect(afterSplitTwo.board.B2.checkers.map((entry) => entry.id)).toEqual([
+      targetBlack.id,
+      middleBlack.id,
+      topWhite.id,
+    ]);
+  });
+
+  it('validates occupied split landings only when the climb-style target is legal', () => {
+    const state = gameStateWithBoard(
+      boardWithPieces({
+        C3: [checker('black'), checker('white'), checker('white')],
+        B2: [checker('black')],
+        C4: [checker('black'), checker('white')],
+        D4: [checker('black', true)],
+        F6: [checker('black')],
+      }),
+    );
+
+    expect(
+      validateAction(
+        state,
+        {
+          type: 'splitOneFromStack',
+          source: 'C3',
+          target: 'B2',
+        },
+        withConfig(),
+      ),
+    ).toEqual({ valid: true });
+
+    expect(
+      validateAction(
+        state,
+        {
+          type: 'splitTwoFromStack',
+          source: 'C3',
+          target: 'B2',
+        },
+        withConfig(),
+      ),
+    ).toEqual({ valid: true });
+
+    expect(
+      validateAction(
+        state,
+        {
+          type: 'splitOneFromStack',
+          source: 'C3',
+          target: 'D4',
+        },
+        withConfig(),
+      ),
+    ).toEqual({
+      valid: false,
+      reason: 'Illegal splitOneFromStack from C3 to D4.',
+    });
+
+    expect(
+      validateAction(
+        state,
+        {
+          type: 'splitTwoFromStack',
+          source: 'C3',
+          target: 'C4',
+        },
+        withConfig(),
+      ),
+    ).toEqual({
+      valid: false,
+      reason: 'Illegal splitTwoFromStack from C3 to C4.',
+    });
+  });
+
   it('supports one-step movement from active singles and controlled stacks onto adjacent empty cells', () => {
     const state = gameStateWithBoard(
       boardWithPieces({

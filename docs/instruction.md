@@ -355,19 +355,25 @@ An adjacent enemy stack may be captured this way because control depends on the 
 
 From a stack you control, you may move the **top two checkers together** as a mini-stack.
 
+That mini-stack may move to an **adjacent** cell:
+
+* to an empty cell, remaining a 2-stack
+* or to an occupied active cell, creating or changing a stack
+
 This is legal only if:
 
-* there is an **adjacent empty cell**
+* the source stack is controlled by you
 * the source stack has at least two checkers
 * the two moved checkers remain together
-* they move onto that adjacent empty cell only
-
-A two-checker split may **not** land on an occupied cell.
+* the destination is adjacent
+* the destination is not a frozen checker
+* the resulting destination height is at most 3
 
 So:
 
-* two-checker split is only for moving onto a neighboring empty cell
-* it creates a height-2 stack on the destination cell
+* a two-checker split may still move onto a neighboring empty cell
+* it may also land on an occupied active single checker and form a height-3 stack
+* it may **not** land on an occupied height-2 stack, because that would exceed height 3
 
 ---
 

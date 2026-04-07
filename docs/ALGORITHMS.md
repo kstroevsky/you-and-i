@@ -39,9 +39,11 @@ The following algorithm families are explicitly covered in this document.
 | Search core | Quiescence search | [`src/ai/search/quiescence.ts`](../src/ai/search/quiescence.ts) |
 | Search core | Aspiration windows | [`src/ai/search/rootSearch.ts`](../src/ai/search/rootSearch.ts) |
 | Search core | Time-governed control flow | [`src/ai/search/rootSearch.ts`](../src/ai/search/rootSearch.ts) |
+| Search core | Fixed-size search stack (`SearchStack`) | [`src/ai/search/types.ts`](../src/ai/search/types.ts), [`src/ai/search/negamax.ts`](../src/ai/search/negamax.ts), [`src/ai/search/quiescence.ts`](../src/ai/search/quiescence.ts) |
 | Move ordering | PV ordering | [`src/ai/moveOrdering.ts`](../src/ai/moveOrdering.ts) |
 | Move ordering | TT move ordering | [`src/ai/moveOrdering.ts`](../src/ai/moveOrdering.ts) |
 | Move ordering | History heuristic | [`src/ai/search/heuristics.ts`](../src/ai/search/heuristics.ts), [`src/ai/moveOrdering.ts`](../src/ai/moveOrdering.ts) |
+| Move ordering | History aging (Schaeffer, 1989) | [`src/ai/search/rootSearch.ts`](../src/ai/search/rootSearch.ts) |
 | Move ordering | Killer heuristic | [`src/ai/search/heuristics.ts`](../src/ai/search/heuristics.ts), [`src/ai/moveOrdering.ts`](../src/ai/moveOrdering.ts) |
 | Move ordering | Continuation heuristic | [`src/ai/search/heuristics.ts`](../src/ai/search/heuristics.ts), [`src/ai/moveOrdering.ts`](../src/ai/moveOrdering.ts) |
 | Move ordering | Static action scoring | [`src/ai/moveOrdering.ts`](../src/ai/moveOrdering.ts) |
@@ -200,7 +202,7 @@ Implementation notes:
 - Bounded TT entries are stored as `exact`, `lower`, or `upper`, not just raw scores.
 - When the TT reaches its `50_000`-entry cap, YOUI evicts the oldest inserted entry before storing the new one. The replacement policy is therefore simple FIFO-by-insertion-order, not depth-preferred replacement.
 - Move penalties are applied after child search, which keeps tactical truth primary but lets repetition and self-undo still matter.
-- The search line is a single shared mutable `SearchLineEntry[]` passed by reference through the recursion. Before each recursive call the current move entry is pushed; a `try/finally` block pops it after the call returns (or throws a timeout). This avoids one `[...spread]` array allocation per node — at depth 5 with branching factor ~20 that is roughly 400 K array copies per search saved.
+- The search passes a `SearchStack` — a pre-allocated fixed-size backing array plus a mutable depth cursor — through every call frame. Before each recursive call, the entry is written at `stack.entries[stack.depth]` and the cursor is incremented; a `try/finally` block decrements it on return or timeout. This mirrors Stockfish's `Stack ss[MAX_PLY]` pass-by-pointer idiom. The key V8 benefit is that `Array.length` never changes after initialization, so V8 keeps the array in its "packed fast-elements" representation throughout the search. Dynamic `Array.push` / `Array.pop` would force the "generic property write" slow path on every ply of a tight recursive loop. The backing array is sized once at root-search startup to `preset.maxDepth + MAX_QUIESCENCE_DEPTH + 4` and never reallocated. This also avoids any heap allocation in the hot per-node path.
 
 Trade-offs:
 
@@ -567,6 +569,41 @@ Implementation notes:
 - Used only as an ordering hint, never as proof of move quality.
 - Especially useful when tactical structure repeats across different subtrees.
 - The history table is an `Int32Array` of size `AI_MODEL_ACTION_COUNT` (2 736), indexed directly by numeric action ID. Realistic benchmarks (50–1 500 entries, mixed hot/cold access) show the write path (read + clamp + store) is **7–14× faster** than `Map.get` + `Map.set`. The read path favors `Map` by ~1.4×, but writes are penalized so heavily that `Int32Array` wins overall. Zero-initialization matches the former `map.get(id) ?? 0` fallback exactly.
+
+### 2.3a History Aging
+
+File:
+[`src/ai/search/rootSearch.ts`](../src/ai/search/rootSearch.ts)
+
+Role in YOUI:
+Prevents shallow-depth history scores from over-dominating ordering at deeper iterative-deepening passes.
+
+Simplified pseudocode:
+
+```text
+after each completed depth:
+  for i in 0..historyScores.length:
+    historyScores[i] >>= 2        # divide by 4
+```
+
+Step by step:
+
+1. Complete one iterative-deepening pass and record the best action.
+2. Right-shift every entry in the global history `Int32Array` by 2 (i.e., multiply by 0.25).
+3. Start the next, deeper pass with all scores deflated but not erased.
+4. Moves that remain consistently strong will rebuild their credit quickly; moves whose reputation was earned only at shallow horizons will fade.
+
+Implementation notes:
+
+- This is Schaeffer's (1989) history-aging technique, described in "The History Heuristic and Alpha-Beta Search Enhancements in Practice."
+- The right-shift is applied unconditionally to all 2 736 entries in one tight loop. At this size (≈11 KB), the loop fits in L1 cache and completes in well under 1 µs.
+- Integer right-shift (`>>= 2`) preserves sign on two's-complement Int32Array values, which is the correct behavior for negative history entries.
+- Without aging, a move that caused many beta-cutoffs at depth 2 can still crowd out plausibly better moves at depth 6, because the credit was earned at a shorter search horizon.
+
+Trade-offs:
+
+- Discards some earned credit, which slightly weakens ordering for moves that are genuinely strong at all depths.
+- Gains stability because the ordering story refreshes each pass rather than accumulating permanent biases.
 
 ### 2.4 Killer Heuristic
 

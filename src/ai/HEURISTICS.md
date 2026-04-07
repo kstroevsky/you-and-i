@@ -359,7 +359,7 @@ Then it builds `staticScore` from the following exact terms:
 | freeze swing | `freezeSwingBonus * 1_200` |
 | structure delta | `clamp(staticPromise, 8_000)` |
 | strategic delta | `clamp(intentDelta, 6_000)` |
-| participation delta | `clamp(participationDelta, 2_400)` |
+| participation delta | `clamp(participationDelta, 4_000)` |
 | semantic policy bias | `+policyBias` |
 | behavior action bias | `+getBehaviorActionBias(profileId, tags)` |
 | opening geometry bias | `round(getBehaviorGeometryBias(profileId, action, behaviorSeed) * 6)` while `moveNumber <= 6` |
@@ -703,9 +703,9 @@ The current window length is preset-dependent:
 
 | Difficulty | `participationWindow` |
 | --- | ---: |
-| `easy` | `2` |
-| `medium` | `3` |
-| `hard` | `3` |
+| `easy` | `5` |
+| `medium` | `8` |
+| `hard` | `10` |
 
 ### Phase scaling
 
@@ -730,9 +730,13 @@ distinctFamilyCount * familyVarietyWeight * phaseScale -
 idleReserveMass * participationBias * 0.65 * phaseScale -
 hotSourceConcentration * sourceReusePenalty * phaseScale -
 hotRegionConcentration * familyVarietyWeight * 0.75 * phaseScale -
-max(0, sameFamilyReuseStreak - 1) * sourceReusePenalty * phaseScale -
-max(0, sameRegionReuseStreak - 1) * familyVarietyWeight * phaseScale
+familyStreakExcess * (1 + max(0, familyStreakExcess - 1) * 0.6) * sourceReusePenalty * phaseScale -
+regionStreakExcess * (1 + max(0, regionStreakExcess - 1) * 0.4) * familyVarietyWeight * phaseScale
 ```
+
+Where `familyStreakExcess = max(0, sameFamilyReuseStreak - 1)` and `regionStreakExcess = max(0, sameRegionReuseStreak - 1)`.
+
+The streak terms use **geometric escalation**: each additional consecutive reuse step adds 60% extra penalty for same-family and 40% for same-region. A two-step family streak costs `1×` the base; a three-step streak costs `1×` + `1.6×`; a four-step streak costs `1×` + `1.6×` + `3.2×`. This makes short bursts of necessary piece reuse cheap while making long ruts progressively more expensive.
 
 Where:
 
@@ -805,15 +809,15 @@ Some heuristic formulas are not hard-coded in the evaluator itself; they are sup
 
 | Difficulty | `policyPriorWeight` | `repetitionPenalty` | `selfUndoPenalty` | `drawAversionAhead` | `drawAversionBehindRelief` | `riskLoopPenalty` | `riskProgressBonus` | `riskTacticalBonus` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `easy` | `80` | `120` | `220` | `220` | `70` | `260` | `420` | `280` |
-| `medium` | `140` | `180` | `320` | `180` | `60` | `220` | `360` | `240` |
-| `hard` | `220` | `240` | `420` | `140` | `50` | `180` | `280` | `200` |
+| `easy` | `80` | `160` | `220` | `220` | `70` | `260` | `420` | `280` |
+| `medium` | `140` | `240` | `320` | `220` | `60` | `280` | `360` | `240` |
+| `hard` | `220` | `400` | `460` | `200` | `50` | `320` | `280` | `200` |
 
 | Difficulty | `participationBias` | `familyVarietyWeight` | `sourceReusePenalty` | `frontierWidthWeight` | `riskBandWidening` | `riskPolicyPriorScale` | `stagnationThreshold` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `easy` | `14` | `30` | `70` | `20` | `0.08` | `0.45` | `0.42` |
-| `medium` | `18` | `42` | `100` | `28` | `0.06` | `0.6` | `0.46` |
-| `hard` | `24` | `56` | `140` | `36` | `0.04` | `0.72` | `0.5` |
+| `easy` | `14` | `30` | `90` | `20` | `0.08` | `0.45` | `0.42` |
+| `medium` | `18` | `42` | `130` | `28` | `0.06` | `0.6` | `0.46` |
+| `hard` | `24` | `56` | `180` | `36` | `0.04` | `0.72` | `0.5` |
 
 | Difficulty | `stagnationRepetitionWeight` | `stagnationSelfUndoWeight` | `stagnationDisplacementWeight` | `stagnationMobilityWeight` | `stagnationProgressWeight` |
 | --- | ---: | ---: | ---: | ---: | ---: |

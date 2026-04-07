@@ -144,6 +144,10 @@ That is why the search can fail soft under a browser deadline while still return
 
 The search stores bounded transposition entries, updates killer/history/continuation tables on quiet cutoffs, and maintains a per-search principal-variation hint map.
 
+#### Search stack (`SearchStack`)
+
+The recursive search passes a `SearchStack` — a pre-allocated fixed-size backing array plus a depth cursor — through every call frame instead of a dynamic JavaScript array. This avoids the V8 "generic property write" slow path that fires when `Array.length` changes dynamically. Each ply writes `stack.entries[stack.depth]` and increments the cursor in a `try/finally` guard that decrements it on exit, matching how Stockfish manages its `Stack ss[MAX_PLY]` pass-by-pointer idiom. The array is sized once at root-search startup to `preset.maxDepth + MAX_QUIESCENCE_DEPTH + 4` and never reallocated during the search.
+
 ![Zero-sum negamax score-scale illustration](../../docs/img/zero-sum-negamax-scale.jpeg)
 
 *This visual belongs with negamax rather than with evaluation because it explains the sign convention that makes the whole recursive search coherent: one side's gain is the other side's loss, so the score at a child node is interpreted through a sign flip when lifted back to the parent.*
@@ -397,6 +401,10 @@ It also codifies two hard resource boundaries:
 - `MAX_QUIESCENCE_DEPTH = 6`
 
 Those numbers are not mathematical truths. They are bounded browser-runtime policy.
+
+#### History aging
+
+After each completed iterative-deepening pass, the root search right-shifts every history score by 2 (i.e., divides by 4). This is Schaeffer's (1989) history-aging technique: scores earned at shallow depth should not dominate ordering at the next, deeper pass where the search horizon is fundamentally longer. Without aging, a move that caused many beta-cutoffs at depth 2 can still crowd out plausibly better moves at depth 6. The right-shift is applied unconditionally to the full `Int32Array` of `2_736` entries in a single tight loop after the depth's best action is recorded.
 
 ## Search-Time Summary Reuse
 
